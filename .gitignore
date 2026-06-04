@@ -1,0 +1,10 @@
+models/onnx/
+*.onnx
+*.f32
+*.npy
+venv/
+__pycache__/
+.DS_Store
+/sfs
+/sfs-gui
+*.test
