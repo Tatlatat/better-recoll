@@ -1,0 +1,82 @@
+[
+  {
+    "query": "biên bản nghiệm thu công trình",
+    "positive": "BIÊN BẢN NGHIỆM THU HOÀN THÀNH HẠNG MỤC CÔNG TRÌNH ĐƯA VÀO SỬ DỤNG. Hôm nay, ngày 12 tháng 3, chúng tôi gồm đại diện chủ đầu tư và nhà thầu thi công tiến hành nghiệm thu hạng mục móng.",
+    "hard_negatives": [
+      "BIÊN BẢN HỌP GIAO BAN CÔNG TRƯỜNG. Nội dung cuộc họp giao ban tuần về tiến độ thi công và an toàn lao động tại công trường.",
+      "BÁO GIÁ VẬT TƯ XÂY DỰNG. Bảng báo giá xi măng, sắt thép, cát đá cho công trình nhà xưởng."
+    ]
+  },
+  {
+    "query": "bien ban nghiem thu",
+    "positive": "BIÊN BẢN NGHIỆM THU HOÀN THÀNH HẠNG MỤC CÔNG TRÌNH ĐƯA VÀO SỬ DỤNG. Đại diện chủ đầu tư và nhà thầu thi công tiến hành nghiệm thu hạng mục.",
+    "hard_negatives": [
+      "BIÊN BẢN BÀN GIAO MẶT BẰNG THI CÔNG giữa chủ đầu tư và đơn vị thi công.",
+      "ĐƠN XIN NGHỈ PHÉP của cán bộ kỹ thuật công trường."
+    ]
+  },
+  {
+    "query": "lấy file template báo giá vật tư",
+    "positive": "BẢNG BÁO GIÁ VẬT TƯ (MẪU). STT, Tên vật tư, Đơn vị, Số lượng, Đơn giá, Thành tiền. Áp dụng cho các công trình dân dụng và công nghiệp.",
+    "hard_negatives": [
+      "HỢP ĐỒNG MUA BÁN VẬT TƯ giữa bên A và bên B, điều khoản thanh toán và giao hàng.",
+      "BIÊN BẢN NGHIỆM THU VẬT TƯ ĐẦU VÀO trước khi đưa vào thi công."
+    ]
+  },
+  {
+    "query": "meeting minutes construction site",
+    "positive": "BIÊN BẢN HỌP CÔNG TRƯỜNG. Thời gian, địa điểm, thành phần tham dự, nội dung thảo luận về tiến độ và biện pháp thi công, kết luận và phân công.",
+    "hard_negatives": [
+      "BÁO CÁO TIẾN ĐỘ THI CÔNG tháng, khối lượng hoàn thành và kế hoạch tháng tới.",
+      "QUYẾT ĐỊNH PHÊ DUYỆT THIẾT KẾ bản vẽ thi công công trình."
+    ]
+  },
+  {
+    "query": "hợp đồng xây dựng nhà xưởng",
+    "positive": "HỢP ĐỒNG THI CÔNG XÂY DỰNG. Bên A (Chủ đầu tư) và Bên B (Nhà thầu) thỏa thuận thi công công trình nhà xưởng sản xuất, giá trị hợp đồng, tiến độ và bảo hành.",
+    "hard_negatives": [
+      "HỢP ĐỒNG THUÊ NHÂN CÔNG thời vụ cho công trình.",
+      "BIÊN BẢN THANH LÝ HỢP ĐỒNG sau khi hoàn thành công trình."
+    ]
+  },
+  {
+    "query": "ban ve thiet ke ket cau mong",
+    "positive": "BẢN VẼ THIẾT KẾ KẾT CẤU MÓNG. Chi tiết bố trí thép móng đơn, móng băng, cao độ đáy móng và quy cách bê tông lót.",
+    "hard_negatives": [
+      "BẢN VẼ THIẾT KẾ KIẾN TRÚC mặt đứng và mặt bằng công trình.",
+      "THUYẾT MINH BIỆN PHÁP THI CÔNG phần thân công trình."
+    ]
+  },
+  {
+    "query": "construction cost estimate spreadsheet",
+    "positive": "DỰ TOÁN CHI PHÍ XÂY DỰNG. Bảng tính khối lượng và chi phí vật liệu, nhân công, máy thi công cho từng hạng mục công trình.",
+    "hard_negatives": [
+      "QUYẾT TOÁN CÔNG TRÌNH hoàn thành đưa vào sử dụng.",
+      "BÁO CÁO TÀI CHÍNH quý của doanh nghiệp xây dựng."
+    ]
+  },
+  {
+    "query": "đơn xin cấp phép xây dựng",
+    "positive": "ĐƠN ĐỀ NGHỊ CẤP GIẤY PHÉP XÂY DỰNG. Kính gửi Ủy ban nhân dân, chủ đầu tư đề nghị cấp phép xây dựng công trình tại địa chỉ nêu trên.",
+    "hard_negatives": [
+      "GIẤY PHÉP KINH DOANH của công ty xây dựng.",
+      "ĐƠN XIN GIA HẠN TIẾN ĐỘ thi công công trình."
+    ]
+  },
+  {
+    "query": "safety inspection report",
+    "positive": "BIÊN BẢN KIỂM TRA AN TOÀN LAO ĐỘNG tại công trường. Kiểm tra giàn giáo, dây an toàn, biển báo và phương án phòng cháy chữa cháy.",
+    "hard_negatives": [
+      "BIÊN BẢN NGHIỆM THU CÔNG TÁC BÊ TÔNG cốt thép.",
+      "DANH SÁCH CÔNG NHÂN tham gia thi công công trình."
+    ]
+  },
+  {
+    "query": "quyet toan cong trinh hoan thanh",
+    "positive": "QUYẾT TOÁN CÔNG TRÌNH HOÀN THÀNH. Tổng hợp giá trị quyết toán A-B, khối lượng phát sinh và giá trị còn lại sau bảo hành.",
+    "hard_negatives": [
+      "DỰ TOÁN CHI PHÍ trước khi khởi công công trình.",
+      "BÁO CÁO TIẾN ĐỘ thi công hàng tuần."
+    ]
+  }
+]
