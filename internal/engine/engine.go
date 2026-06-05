@@ -20,6 +20,7 @@ import (
 type Config struct {
 	ModelRoot string
 	IndexPath string
+	RerankK   int
 }
 
 // DefaultConfig creates a Config with specified root paths.
@@ -42,10 +43,12 @@ type Result struct {
 type Engine struct {
 	mu       sync.Mutex
 	embedder *model.OnnxEmbedder
+	reranker *model.OnnxReranker
 	store    *store.FileStore
 	bm25     *index.BM25
 	vindex   *index.VectorIndex
 	nextID   int64
+	rerankK  int
 }
 
 // New instantiates a new search engine.
@@ -66,6 +69,15 @@ func New(cfg Config) (*Engine, error) {
 		return nil, fmt.Errorf("failed to initialize store: %w", err)
 	}
 
+	rerankerPath := filepath.Join(cfg.ModelRoot, "models/onnx/bge-reranker/model.onnx")
+	rerankerTokenizerPath := filepath.Join(cfg.ModelRoot, "models/onnx/bge-reranker")
+	reranker, err := model.NewOnnxReranker(rerankerPath, rerankerTokenizerPath)
+	if err != nil {
+		st.Close()
+		embedder.Close()
+		return nil, fmt.Errorf("failed to initialize reranker: %w", err)
+	}
+
 	bm25 := index.NewBM25()
 	vindex := index.NewVectorIndex(embedder.Dim())
 
@@ -80,6 +92,7 @@ func New(cfg Config) (*Engine, error) {
 		if err != nil {
 			st.Close()
 			embedder.Close()
+			reranker.Close()
 			return nil, fmt.Errorf("failed to retrieve existing chunk %d: %w", id, err)
 		}
 		bm25.Add(ch.ID, ch.NormText)
@@ -89,12 +102,19 @@ func New(cfg Config) (*Engine, error) {
 		bm25.Build()
 	}
 
+	rerankK := cfg.RerankK
+	if rerankK == 0 {
+		rerankK = 20
+	}
+
 	return &Engine{
 		embedder: embedder,
+		reranker: reranker,
 		store:    st,
 		bm25:     bm25,
 		vindex:   vindex,
 		nextID:   maxID + 1,
+		rerankK:  rerankK,
 	}, nil
 }
 
@@ -263,6 +283,11 @@ func (e *Engine) Close() error {
 	var errs []error
 	if e.embedder != nil {
 		if err := e.embedder.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if e.reranker != nil {
+		if err := e.reranker.Close(); err != nil {
 			errs = append(errs, err)
 		}
 	}

@@ -125,28 +125,33 @@ func main() {
 		defer eng.Close()
 
 		// Search
-		results, err := eng.Search(query, 10)
+		results, err := eng.SearchRanked(query, 10)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error searching: %v\n", err)
 			os.Exit(1)
 		}
 
-		if len(results) == 0 {
-			fmt.Println("No results found.")
-			return
+		printBucket := func(header string, bucket []engine.Result) {
+			fmt.Println(header)
+			if len(bucket) == 0 {
+				fmt.Println("(không có)")
+				return
+			}
+			for _, r := range bucket {
+				runes := []rune(r.Text)
+				snippet := string(runes)
+				if len(runes) > 80 {
+					snippet = string(runes[:80]) + "..."
+				}
+				// Sanitize newlines to display neatly in terminal list
+				snippet = strings.ReplaceAll(snippet, "\n", " ")
+				fmt.Printf("%f  %s\n", r.Score, r.FilePath)
+				fmt.Printf("%s\n\n", snippet)
+			}
 		}
 
-		for _, r := range results {
-			runes := []rune(r.Text)
-			snippet := string(runes)
-			if len(runes) > 80 {
-				snippet = string(runes[:80]) + "..."
-			}
-			// Sanitize newlines to display neatly in terminal list
-			snippet = strings.ReplaceAll(snippet, "\n", " ")
-			fmt.Printf("%f  %s\n", r.Score, r.FilePath)
-			fmt.Printf("%s\n\n", snippet)
-		}
+		printBucket("CHÍNH XÁC:", results.Exact)
+		printBucket("GỢI Ý:", results.Suggest)
 
 	default:
 		fmt.Printf("Error: unknown subcommand %q\n", cmd)
