@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 
 	"sfs/internal/normalize"
 )
@@ -86,6 +87,18 @@ func (e *Engine) SearchRanked(query string, k int) (RankedResults, error) {
 
 	for i := range candidates {
 		candidates[i].Score = scores[i]
+	}
+
+	// Apply router boosts if applicable
+	if e.Router != nil {
+		boosts := e.Router.Boost(query)
+		for i := range candidates {
+			for label, boost := range boosts {
+				if strings.Contains(strings.ToLower(candidates[i].FilePath), strings.ToLower(label)) {
+					candidates[i].Score += boost
+				}
+			}
+		}
 	}
 
 	// Sort candidates by reranker score desc, tie-breaker by ChunkID

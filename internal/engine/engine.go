@@ -9,10 +9,12 @@ import (
 	"sync"
 
 	"sfs/internal/chunk"
+	"sfs/internal/dedupe"
 	"sfs/internal/index"
 	"sfs/internal/model"
 	"sfs/internal/normalize"
 	"sfs/internal/reader"
+	"sfs/internal/search"
 	"sfs/internal/store"
 )
 
@@ -21,6 +23,7 @@ type Config struct {
 	ModelRoot string
 	IndexPath string
 	RerankK   int
+	DiffEmbed bool
 }
 
 // DefaultConfig creates a Config with specified root paths.
@@ -41,14 +44,16 @@ type Result struct {
 
 // Engine wraps the embedder, chunk storage, and text/vector search indexes.
 type Engine struct {
-	mu       sync.Mutex
-	embedder *model.OnnxEmbedder
-	reranker *model.OnnxReranker
-	store    *store.FileStore
-	bm25     *index.BM25
-	vindex   *index.VectorIndex
-	nextID   int64
-	rerankK  int
+	mu        sync.Mutex
+	embedder  *model.OnnxEmbedder
+	reranker  *model.OnnxReranker
+	store     *store.FileStore
+	bm25      *index.BM25
+	vindex    *index.VectorIndex
+	nextID    int64
+	rerankK   int
+	Router    *search.Router
+	diffEmbed bool
 }
 
 // New instantiates a new search engine.
@@ -96,7 +101,9 @@ func New(cfg Config) (*Engine, error) {
 			return nil, fmt.Errorf("failed to retrieve existing chunk %d: %w", id, err)
 		}
 		bm25.Add(ch.ID, ch.NormText)
-		vindex.Add(ch.ID, vectors[i])
+		if !(cfg.DiffEmbed && ch.IsBoilerplate) {
+			vindex.Add(ch.ID, vectors[i])
+		}
 	}
 	if len(ids) > 0 {
 		bm25.Build()
@@ -108,13 +115,15 @@ func New(cfg Config) (*Engine, error) {
 	}
 
 	return &Engine{
-		embedder: embedder,
-		reranker: reranker,
-		store:    st,
-		bm25:     bm25,
-		vindex:   vindex,
-		nextID:   maxID + 1,
-		rerankK:  rerankK,
+		embedder:  embedder,
+		reranker:  reranker,
+		store:     st,
+		bm25:      bm25,
+		vindex:    vindex,
+		nextID:    maxID + 1,
+		rerankK:   rerankK,
+		Router:    search.NewRouter(),
+		diffEmbed: cfg.DiffEmbed,
 	}, nil
 }
 
@@ -132,6 +141,7 @@ func (e *Engine) Index(dir string) error {
 	defer e.mu.Unlock()
 
 	var pending []pendingChunk
+	finder := dedupe.New(2)
 
 	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -153,6 +163,7 @@ func (e *Engine) Index(dir string) error {
 
 		chunks := chunk.Chunk(text, 512)
 		for _, ch := range chunks {
+			finder.Add(ch.Text)
 			pending = append(pending, pendingChunk{
 				filePath: path,
 				text:     ch.Text,
@@ -170,6 +181,9 @@ func (e *Engine) Index(dir string) error {
 		return nil
 	}
 
+	// Finalize dedupe finder (first pass completed)
+	finder.Build()
+
 	// Batch-embed all chunk texts
 	textsToEmbed := make([]string, len(pending))
 	for i, pc := range pending {
@@ -180,7 +194,7 @@ func (e *Engine) Index(dir string) error {
 		return fmt.Errorf("failed to embed chunk texts: %w", err)
 	}
 
-	// Build store.Chunk records
+	// Build store.Chunk records (second pass: set IsBoilerplate)
 	storeChunks := make([]store.Chunk, len(pending))
 	for i, pc := range pending {
 		id := e.nextID
@@ -193,7 +207,7 @@ func (e *Engine) Index(dir string) error {
 			NormText:      pc.normText,
 			Offset:        pc.offset,
 			Vector:        vectors[i],
-			IsBoilerplate: false,
+			IsBoilerplate: finder.IsBoilerplate(pc.text),
 		}
 	}
 
@@ -202,10 +216,12 @@ func (e *Engine) Index(dir string) error {
 		return fmt.Errorf("failed to write chunks to store: %w", err)
 	}
 
-	// Add to indexes
+	// Add to indexes (respect DiffEmbed)
 	for _, sc := range storeChunks {
 		e.bm25.Add(sc.ID, sc.NormText)
-		e.vindex.Add(sc.ID, sc.Vector)
+		if !(e.diffEmbed && sc.IsBoilerplate) {
+			e.vindex.Add(sc.ID, sc.Vector)
+		}
 	}
 
 	// Finalize BM25 IDF parameters
