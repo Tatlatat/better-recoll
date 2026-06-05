@@ -1,0 +1,14 @@
+import { chromium } from 'playwright';
+import { AxeBuilder } from '@axe-core/playwright';
+const b = await chromium.launch();
+const ctx = await b.newContext({ viewport:{width:900,height:760} });
+const p = await ctx.newPage();
+await p.goto('http://localhost:8765/',{waitUntil:'load'}); await p.waitForTimeout(1500);
+await p.evaluate(()=>document.documentElement.setAttribute('data-theme','dark'));
+await p.$eval('input',el=>{el.value='rmit';el.dispatchEvent(new Event('input',{bubbles:true}));});
+await p.waitForTimeout(2500);
+const results = await new AxeBuilder({ page: p }).analyze();
+console.log('DARK a11y violations:', results.violations.length);
+for(const v of results.violations) console.log(`  [${v.impact}] ${v.id}: ${v.nodes.length} nodes`);
+if(!results.violations.length) console.log('  (dark theme sạch a11y)');
+await b.close();
