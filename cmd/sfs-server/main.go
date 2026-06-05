@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -39,6 +40,7 @@ var (
 	indexMode     string
 	initialCount  int
 	currentCount  int
+	isHomeIndexingRunning bool
 )
 
 const htmlContent = `<!DOCTYPE html>
@@ -535,10 +537,65 @@ const htmlContent = `<!DOCTYPE html>
             50% { opacity: 1; }
             100% { opacity: 0.7; }
         }
+
+        .onboard-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(11, 15, 25, 0.95);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(8px);
+        }
+
+        .onboard-content {
+            background: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 24px;
+            padding: 2.5rem;
+            max-width: 500px;
+            width: 90%;
+            text-align: center;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .onboard-content h2 {
+            font-size: 1.8rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #fff 0%, #a5b4fc 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .setup-banner {
+            z-index: 1100;
+        }
     </style>
 </head>
 <body>
     <div class="ambient-bg"></div>
+    <!-- Onboarding Modal (Visible only if not onboarded) -->
+    <div id="onboard-modal" class="onboard-modal" style="display:none">
+        <div class="onboard-content">
+            <h2>Chào mừng bạn đến với Better Recoll</h2>
+            <p style="color: var(--text-secondary); margin-bottom: 1.5rem; font-size: 0.95rem;">Chọn một thư mục chính chứa tài liệu của bạn để bắt đầu lập chỉ mục nhanh.</p>
+            <div style="display: flex; flex-direction: column; gap: 1rem; align-items: center; width: 100%;">
+                <button id="onboard-pick-btn" class="setup-btn" style="background: var(--primary); font-size: 1.05rem; padding: 0.6rem 1.5rem;" onclick="triggerOnboardPicker()">Chọn thư mục tài liệu...</button>
+                <span id="onboard-path" style="font-family: monospace; color: var(--text-secondary); word-break: break-all; font-size: 0.85rem; text-align: center;">Chưa chọn thư mục nào</span>
+                <button id="onboard-start-btn" class="setup-btn" style="background: var(--exact-color); font-size: 1.05rem; padding: 0.6rem 1.5rem; display: none;" onclick="startOnboarding()">Bắt đầu sử dụng</button>
+            </div>
+            <div id="onboard-status" style="margin-top: 1.5rem; font-size: 0.95rem; text-align: center; color: var(--text-secondary); display: none;"></div>
+        </div>
+    </div>
+
     <div class="container">
         <!-- Navigation -->
         <nav class="main-nav">
@@ -991,6 +1048,24 @@ const htmlContent = `<!DOCTYPE html>
                     wasDownloading = false;
                 }
 
+                // Handle Onboarding modal visibility
+                const onboardModal = document.getElementById('onboard-modal');
+                const onboardStatus = document.getElementById('onboard-status');
+                const onboardPickBtn = document.getElementById('onboard-pick-btn');
+                const onboardStartBtn = document.getElementById('onboard-start-btn');
+
+                if (!status.onboarded) {
+                    onboardModal.style.display = 'flex';
+                    if (status.indexing) {
+                        onboardPickBtn.style.display = 'none';
+                        onboardStartBtn.style.display = 'none';
+                        onboardStatus.style.display = 'block';
+                        onboardStatus.textContent = 'Đang thiết lập ban đầu (nhanh): ' + status.currentDir + ' (' + status.filesIndexed + ' file)...';
+                    }
+                } else {
+                    onboardModal.style.display = 'none';
+                }
+
                 // Handle indexing status
                 const indicator = document.getElementById('indexing-indicator');
                 const indicatorText = document.getElementById('indexing-status-text');
@@ -999,7 +1074,13 @@ const htmlContent = `<!DOCTYPE html>
 
                 if (status.indexing) {
                     indicator.style.display = 'flex';
-                    const msg = 'Đang lập chỉ mục: ' + status.currentDir + ' (' + status.filesIndexed + ' file)...';
+                    let prefix = 'Đang lập chỉ mục: ';
+                    if (status.phase === 'background') {
+                        prefix = 'Đang lập chỉ mục nền: ';
+                    } else if (status.phase === 'fast') {
+                        prefix = 'Đang lập chỉ mục nhanh: ';
+                    }
+                    const msg = prefix + status.currentDir + ' (' + status.filesIndexed + ' file)...';
                     indicatorText.textContent = msg;
 
                     if (indexStatusDiv) {
@@ -1053,6 +1134,60 @@ const htmlContent = `<!DOCTYPE html>
                 alert('Lỗi kết nối setup: ' + err.message);
                 setupBtn.disabled = false;
                 setupBtn.textContent = 'Tải ngay';
+            }
+        }
+
+        // Onboarding handlers
+        let onboardPathStr = '';
+
+        async function triggerOnboardPicker() {
+            if (typeof window.pickFolder === 'function') {
+                try {
+                    const path = await window.pickFolder();
+                    if (path) {
+                        onboardPathStr = path;
+                        document.getElementById('onboard-path').textContent = path;
+                        document.getElementById('onboard-start-btn').style.display = 'inline-block';
+                    }
+                } catch (err) {
+                    console.error('Lỗi chọn thư mục onboarding:', err);
+                }
+            } else {
+                const path = prompt('Nhập đường dẫn thư mục tài liệu chính:');
+                if (path) {
+                    onboardPathStr = path;
+                    document.getElementById('onboard-path').textContent = path;
+                    document.getElementById('onboard-start-btn').style.display = 'inline-block';
+                }
+            }
+        }
+
+        async function startOnboarding() {
+            if (!onboardPathStr) return;
+            const pickBtn = document.getElementById('onboard-pick-btn');
+            const startBtn = document.getElementById('onboard-start-btn');
+            const statusDiv = document.getElementById('onboard-status');
+
+            pickBtn.style.display = 'none';
+            startBtn.style.display = 'none';
+            statusDiv.style.display = 'block';
+            statusDiv.textContent = 'Đang bắt đầu lập chỉ mục nhanh...';
+
+            try {
+                const response = await fetch('/api/onboard', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ dir: onboardPathStr })
+                });
+
+                if (!response.ok) {
+                    const errMsg = await response.text();
+                    throw new Error(errMsg || 'Lỗi không xác định');
+                }
+            } catch (err) {
+                statusDiv.textContent = 'Lập chỉ mục nhanh thất bại: ' + err.message;
+                pickBtn.style.display = 'inline-block';
+                startBtn.style.display = 'inline-block';
             }
         }
 
@@ -1287,6 +1422,7 @@ type StatusResponse struct {
 	Percent      int    `json:"percent"`
 	Status       string `json:"status"`
 	Error        string `json:"error"`
+	Onboarded    bool   `json:"onboarded"`
 	Indexing     bool   `json:"indexing"`
 	CurrentDir   string `json:"currentDir"`
 	FilesIndexed int    `json:"filesIndexed"`
@@ -1316,14 +1452,25 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	setupMutex.Unlock()
 
+	stateMutex.Lock()
+	onboarded := globalState.Onboarded
+	stateMutex.Unlock()
+	resp.Onboarded = onboarded
+
 	indexingMutex.Lock()
-	resp.Indexing = isIndexing
+	resp.Indexing = isIndexing || isHomeIndexingRunning
 	resp.CurrentDir = indexDir
-	resp.Phase = indexMode
+	if isIndexing {
+		resp.Phase = indexMode
+	} else if isHomeIndexingRunning {
+		resp.Phase = "background"
+	} else {
+		resp.Phase = "idle"
+	}
 	initC := initialCount
 	indexingMutex.Unlock()
 
-	if resp.Indexing {
+	if isIndexing {
 		currC := getStoreCount(cfg.IndexPath)
 		diff := currC - initC
 		if diff < 0 {
@@ -1331,7 +1478,7 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 		}
 		resp.FilesIndexed = diff
 	} else {
-		resp.Phase = "idle"
+		resp.FilesIndexed = 0
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -1378,6 +1525,14 @@ func handleSetup(w http.ResponseWriter, r *http.Request) {
 				globalEngine = eng
 				engineMutex.Unlock()
 				downloadStatus = "Đã hoàn thành!"
+
+				stateMutex.Lock()
+				onboarded := globalState.Onboarded
+				primaryDir := globalState.PrimaryDir
+				stateMutex.Unlock()
+				if onboarded {
+					go runBackgroundHomeIndexing(eng, primaryDir)
+				}
 			}
 		}
 		setupMutex.Unlock()
@@ -1398,6 +1553,258 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write([]byte(htmlContent))
+}
+
+type AppState struct {
+	Onboarded  bool   `json:"onboarded"`
+	PrimaryDir string `json:"primaryDir"`
+}
+
+var (
+	stateMutex  sync.Mutex
+	globalState AppState
+)
+
+func loadState(indexPath string) AppState {
+	statePath := filepath.Join(filepath.Dir(indexPath), "state.json")
+	file, err := os.Open(statePath)
+	if err != nil {
+		return AppState{}
+	}
+	defer file.Close()
+	var state AppState
+	if err := json.NewDecoder(file).Decode(&state); err != nil {
+		log.Printf("Error decoding state file: %v", err)
+		return AppState{}
+	}
+	return state
+}
+
+func saveState(indexPath string, state AppState) {
+	statePath := filepath.Join(filepath.Dir(indexPath), "state.json")
+	os.MkdirAll(filepath.Dir(statePath), 0755)
+	file, err := os.Create(statePath)
+	if err != nil {
+		log.Printf("Error creating state file: %v", err)
+		return
+	}
+	defer file.Close()
+	if err := json.NewEncoder(file).Encode(state); err != nil {
+		log.Printf("Error encoding state file: %v", err)
+	}
+}
+
+func findSafeTrees(dirPath string, primaryDir string) (bool, []string) {
+	name := filepath.Base(dirPath)
+
+	if primaryDir != "" && strings.EqualFold(filepath.Clean(dirPath), filepath.Clean(primaryDir)) {
+		return false, nil
+	}
+
+	if strings.HasPrefix(name, ".") ||
+		strings.EqualFold(name, "Library") ||
+		strings.EqualFold(name, "System") ||
+		strings.EqualFold(name, "node_modules") ||
+		strings.EqualFold(name, "caches") ||
+		strings.EqualFold(name, "cache") {
+		return false, nil
+	}
+
+	entries, err := os.ReadDir(dirPath)
+	if err != nil {
+		return true, nil
+	}
+
+	mySafe := true
+	var allChildren []string
+	var subTrees []string
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			childPath := filepath.Join(dirPath, entry.Name())
+			childSafe, childSafeTrees := findSafeTrees(childPath, primaryDir)
+			if !childSafe {
+				mySafe = false
+				subTrees = append(subTrees, childSafeTrees...)
+			} else {
+				allChildren = append(allChildren, childPath)
+			}
+		}
+	}
+
+	if mySafe {
+		return true, []string{dirPath}
+	}
+
+	merged := append(allChildren, subTrees...)
+	return false, merged
+}
+
+func runBackgroundHomeIndexing(eng *engine.Engine, primaryDir string) {
+	indexingMutex.Lock()
+	if isHomeIndexingRunning {
+		indexingMutex.Unlock()
+		log.Println("Background home indexing is already running, skipping start.")
+		return
+	}
+	isHomeIndexingRunning = true
+	indexingMutex.Unlock()
+
+	defer func() {
+		indexingMutex.Lock()
+		isHomeIndexingRunning = false
+		indexingMutex.Unlock()
+	}()
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		log.Printf("Error getting user home directory: %v", err)
+		return
+	}
+
+	_, finalDirs := findSafeTrees(home, primaryDir)
+
+	// Build a map of already indexed directories for fast checking.
+	alreadyIndexed := make(map[string]bool)
+	for _, d := range eng.IndexedDirs() {
+		alreadyIndexed[filepath.Clean(d)] = true
+	}
+
+	// Filter finalDirs to only index directories not already indexed
+	var dirsToIndex []string
+	for _, dir := range finalDirs {
+		if alreadyIndexed[filepath.Clean(dir)] {
+			continue
+		}
+		dirsToIndex = append(dirsToIndex, dir)
+	}
+
+	log.Printf("Starting background home directory indexing. Found %d safe directories to index, %d are not yet indexed.", len(finalDirs), len(dirsToIndex))
+
+	for _, dir := range dirsToIndex {
+		indexingMutex.Lock()
+		for isIndexing {
+			indexingMutex.Unlock()
+			time.Sleep(2 * time.Second)
+			indexingMutex.Lock()
+		}
+		isIndexing = true
+		indexDir = dir
+		indexMode = "background"
+		cfg := globalConfig
+		startCount := getStoreCount(cfg.IndexPath)
+		initialCount = startCount
+		currentCount = startCount
+		indexingMutex.Unlock()
+
+		log.Printf("Background indexing home subdirectory: %s", dir)
+		opts := engine.BackgroundIndexOptions()
+		opts.OnlyExtensions = []string{"pdf", "docx", "xlsx", "txt"}
+		err := eng.IndexThrottled(dir, opts)
+		if err != nil {
+			log.Printf("Error indexing subdirectory %s: %v", dir, err)
+		}
+
+		indexingMutex.Lock()
+		isIndexing = false
+		indexingMutex.Unlock()
+	}
+
+	log.Printf("Finished background home directory indexing.")
+}
+
+func handleOnboard(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	engineMutex.RLock()
+	eng := globalEngine
+	cfg := globalConfig
+	engineMutex.RUnlock()
+
+	if eng == nil {
+		http.Error(w, "Mô hình AI chưa được tải. Hãy tải mô hình trước.", http.StatusServiceUnavailable)
+		return
+	}
+
+	type OnboardRequest struct {
+		Dir string `json:"dir"`
+	}
+
+	var req OnboardRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	if req.Dir == "" {
+		http.Error(w, "Directory path 'dir' is required", http.StatusBadRequest)
+		return
+	}
+
+	indexingMutex.Lock()
+	if isIndexing {
+		indexingMutex.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]bool{"busy": true})
+		return
+	}
+	isIndexing = true
+	indexDir = req.Dir
+	indexMode = "fast"
+	indexingMutex.Unlock()
+
+	go func() {
+		startCount := getStoreCount(cfg.IndexPath)
+		indexingMutex.Lock()
+		initialCount = startCount
+		currentCount = startCount
+		indexingMutex.Unlock()
+
+		log.Printf("Onboarding: Starting Fast Index of %s", req.Dir)
+		err := eng.IndexThrottled(req.Dir, engine.FastIndexOptions())
+		
+		endCount := getStoreCount(cfg.IndexPath)
+
+		indexingMutex.Lock()
+		isIndexing = false
+		currentCount = endCount
+		if err != nil {
+			log.Printf("Onboarding Fast indexing error: %v", err)
+		} else {
+			log.Printf("Onboarding Fast indexing finished. Chunks: %d -> %d", startCount, endCount)
+			
+			stateMutex.Lock()
+			globalState.Onboarded = true
+			globalState.PrimaryDir = req.Dir
+			saveState(cfg.IndexPath, globalState)
+			stateMutex.Unlock()
+
+			indexedFoldersMutex.Lock()
+			exists := false
+			for _, f := range indexedFolders {
+				if f == req.Dir {
+					exists = true
+					break
+				}
+			}
+			if !exists {
+				indexedFolders = append(indexedFolders, req.Dir)
+			}
+			indexedFoldersMutex.Unlock()
+		}
+		indexingMutex.Unlock()
+
+		if err == nil {
+			log.Println("Onboarding Fast phase completed. Starting background home indexing...")
+			runBackgroundHomeIndexing(eng, req.Dir)
+		}
+	}()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"started": true})
 }
 
 func checkModelExists(cfg engine.Config) bool {
@@ -1581,6 +1988,13 @@ func downloadAndSetupModels(cfg engine.Config) error {
 func StartServer(port string, cfg engine.Config) (*http.Server, error) {
 	globalConfig = cfg
 
+	// Load state at startup
+	stateMutex.Lock()
+	globalState = loadState(cfg.IndexPath)
+	onboarded := globalState.Onboarded
+	primaryDir := globalState.PrimaryDir
+	stateMutex.Unlock()
+
 	// Setup Engine if model files already exist
 	if checkModelExists(cfg) {
 		log.Printf("Models found on disk. Initializing search engine...")
@@ -1590,6 +2004,11 @@ func StartServer(port string, cfg engine.Config) (*http.Server, error) {
 		} else {
 			globalEngine = eng
 			log.Printf("Engine successfully initialized.")
+
+			// AUTOMATICALLY resume background home indexing if onboarded
+			if onboarded {
+				go runBackgroundHomeIndexing(eng, primaryDir)
+			}
 		}
 	} else {
 		log.Printf("WARNING: AI Models missing from %s. Engine will remain uninitialized until setup is run.", cfg.ModelRoot)
@@ -1603,6 +2022,7 @@ func StartServer(port string, cfg engine.Config) (*http.Server, error) {
 	mux.HandleFunc("/api/setup", handleSetup)
 	mux.HandleFunc("/api/status", handleStatus)
 	mux.HandleFunc("/api/folders", handleFolders)
+	mux.HandleFunc("/api/onboard", handleOnboard)
 
 	server := &http.Server{
 		Addr:    "localhost:" + port,
