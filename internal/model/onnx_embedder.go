@@ -226,4 +226,3 @@ func (e *OnnxEmbedder) Rerank(query string, texts []string) ([]float32, error) {
 func (e *OnnxEmbedder) Dim() int {
 	return 1024
 }
-

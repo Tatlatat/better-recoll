@@ -68,16 +68,18 @@ func (s *SafeEmbedder) Embed(texts []string) ([][]float32, error) {
 }
 
 type Engine struct {
-	mu        sync.Mutex
-	embedder  *SafeEmbedder
-	reranker  *model.OnnxReranker
-	store     *store.FileStore
-	bm25      *index.BM25
-	vindex    *index.VectorIndex
-	nextID    int64
-	rerankK   int
-	Router    *search.Router
-	diffEmbed bool
+	mu            sync.Mutex
+	embedder      *SafeEmbedder       // search embedder (accessed by rerank.go)
+	reranker      *model.OnnxReranker // search reranker (accessed by rerank.go)
+	indexEmbedder *SafeEmbedder       // indexing embedder
+	indexReranker *model.OnnxReranker // indexing reranker
+	store         *store.FileStore
+	bm25          *index.BM25
+	vindex        *index.VectorIndex
+	nextID        int64
+	rerankK       int
+	Router        *search.Router
+	diffEmbed     bool
 }
 
 // New instantiates a new search engine.
@@ -87,24 +89,46 @@ func New(cfg Config) (*Engine, error) {
 	onnxCfg.ModelPath = filepath.Join(cfg.ModelRoot, onnxCfg.ModelPath)
 	onnxCfg.TokenizerPath = filepath.Join(cfg.ModelRoot, onnxCfg.TokenizerPath)
 
+	// Create search embedder
 	embedder, err := model.NewOnnxEmbedder(onnxCfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize embedder: %w", err)
 	}
 
+	// Create index embedder
+	indexEmbedder, err := model.NewOnnxEmbedder(onnxCfg)
+	if err != nil {
+		embedder.Close()
+		return nil, fmt.Errorf("failed to initialize index embedder: %w", err)
+	}
+
 	st, err := store.NewFileStore(cfg.IndexPath)
 	if err != nil {
+		indexEmbedder.Close()
 		embedder.Close()
 		return nil, fmt.Errorf("failed to initialize store: %w", err)
 	}
 
 	rerankerPath := filepath.Join(cfg.ModelRoot, "models/onnx/bge-reranker/model.onnx")
 	rerankerTokenizerPath := filepath.Join(cfg.ModelRoot, "models/onnx/bge-reranker")
+
+	// Create search reranker
 	reranker, err := model.NewOnnxReranker(rerankerPath, rerankerTokenizerPath)
 	if err != nil {
 		st.Close()
+		indexEmbedder.Close()
 		embedder.Close()
 		return nil, fmt.Errorf("failed to initialize reranker: %w", err)
+	}
+
+	// Create index reranker
+	indexReranker, err := model.NewOnnxReranker(rerankerPath, rerankerTokenizerPath)
+	if err != nil {
+		reranker.Close()
+		st.Close()
+		indexEmbedder.Close()
+		embedder.Close()
+		return nil, fmt.Errorf("failed to initialize index reranker: %w", err)
 	}
 
 	bm25 := index.NewBM25()
@@ -119,9 +143,11 @@ func New(cfg Config) (*Engine, error) {
 		}
 		ch, err := st.GetChunk(id)
 		if err != nil {
-			st.Close()
-			embedder.Close()
+			indexReranker.Close()
 			reranker.Close()
+			st.Close()
+			indexEmbedder.Close()
+			embedder.Close()
 			return nil, fmt.Errorf("failed to retrieve existing chunk %d: %w", id, err)
 		}
 		bm25.Add(ch.ID, ch.NormText)
@@ -143,15 +169,17 @@ func New(cfg Config) (*Engine, error) {
 	}
 
 	return &Engine{
-		embedder:  &SafeEmbedder{OnnxEmbedder: embedder},
-		reranker:  reranker,
-		store:     st,
-		bm25:      bm25,
-		vindex:    vindex,
-		nextID:    maxID + 1,
-		rerankK:   rerankK,
-		Router:    search.NewRouter(),
-		diffEmbed: cfg.DiffEmbed,
+		embedder:      &SafeEmbedder{OnnxEmbedder: embedder},
+		reranker:      reranker,
+		indexEmbedder: &SafeEmbedder{OnnxEmbedder: indexEmbedder},
+		indexReranker: indexReranker,
+		store:         st,
+		bm25:          bm25,
+		vindex:        vindex,
+		nextID:        maxID + 1,
+		rerankK:       rerankK,
+		Router:        search.NewRouter(),
+		diffEmbed:     cfg.DiffEmbed,
 	}, nil
 }
 
@@ -175,7 +203,7 @@ type IndexOptions struct {
 func FastIndexOptions() IndexOptions {
 	return IndexOptions{
 		Workers:             runtime.NumCPU(),
-		BatchSize:           32,
+		BatchSize:           8,
 		PauseBetweenBatches: 0,
 	}
 }
@@ -184,8 +212,8 @@ func FastIndexOptions() IndexOptions {
 func BackgroundIndexOptions() IndexOptions {
 	return IndexOptions{
 		Workers:             1,
-		BatchSize:           8,
-		PauseBetweenBatches: 400 * time.Millisecond,
+		BatchSize:           4,
+		PauseBetweenBatches: 600 * time.Millisecond,
 	}
 }
 
@@ -292,6 +320,9 @@ func (e *Engine) indexThrottled(dir string, opts IndexOptions) error {
 	if batchSize <= 0 {
 		batchSize = 32
 	}
+	if batchSize > 8 {
+		batchSize = 8
+	}
 	workers := opts.Workers
 	if workers <= 0 {
 		workers = 1
@@ -343,7 +374,7 @@ func (e *Engine) indexThrottled(dir string, opts IndexOptions) error {
 					texts[i] = pc.text
 				}
 
-				vectors, err := e.embedder.Embed(texts)
+				vectors, err := e.indexEmbedder.Embed(texts)
 				if err != nil {
 					setWorkerErr(fmt.Errorf("failed to embed chunk texts: %w", err))
 					return
@@ -485,6 +516,16 @@ func (e *Engine) Close() error {
 	}
 	if e.reranker != nil {
 		if err := e.reranker.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if e.indexEmbedder != nil {
+		if err := e.indexEmbedder.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if e.indexReranker != nil {
+		if err := e.indexReranker.Close(); err != nil {
 			errs = append(errs, err)
 		}
 	}
