@@ -49,6 +49,10 @@
             display: none !important;
         }
 
+        body.search-mode main {
+            gap: 8px !important;
+        }
+
         /* Helper utility styles to complement DaisyUI without tailwind.js compiler */
         .mx-auto { margin-left: auto; margin-right: auto; }
         .max-w-640 { max-width: 640px; }
@@ -107,8 +111,8 @@
             -webkit-box-orient: vertical;
             overflow: hidden;
         }
-        .text-base-content-50 { opacity: 0.5; }
-        .text-base-content-60 { opacity: 0.6; }
+        .text-base-content-50 { opacity: 0.7; }
+        .text-base-content-60 { opacity: 0.75; }
         .text-base-content-70 { opacity: 0.7; }
         .text-base-content-85 { opacity: 0.85; }
         
@@ -129,29 +133,32 @@
 
     <div class="mx-auto max-w-640 px-4 py-8 flex flex-col gap-6" id="main-container">
         <!-- Top Navigation Area -->
-        <div class="flex justify-between items-center w-full pb-2" id="top-nav">
+        <header class="flex justify-between items-center w-full pb-2" id="top-nav">
             <div class="flex items-center gap-2">
-                <span class="text-xs font-semibold uppercase tracking-wider text-base-content-60">better-recoll</span>
+                <h1 class="text-xs font-semibold uppercase tracking-wider text-base-content-70">better-recoll</h1>
                 <div id="indexing-badge" class="badge badge-warning badge-xs gap-1 hidden py-1.5 px-2">
                     <span class="loading loading-spinner" style="width: 0.75rem; height: 0.75rem;"></span>
                     <span class="font-semibold" style="font-size: 10px;">Đang lập chỉ mục...</span>
                 </div>
             </div>
-            <button onclick="openSettings()" class="btn btn-ghost btn-sm btn-circle" title="Cài đặt">
+            <button onclick="openSettings()" class="btn btn-ghost btn-sm btn-circle" title="Cài đặt" aria-label="Cài đặt">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4 text-base-content-70">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.43l-1.003.828c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.99l1.005.831a1.125 1.125 0 0 1 .26 1.43l-1.297 2.247a1.125 1.125 0 0 1-1.37.491l-1.216-.456c-.356-.133-.751-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.552 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.43l1.004-.83c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
                     <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
                 </svg>
             </button>
-        </div>
+        </header>
 
-        <!-- Search Input Wrapper -->
-        <div class="relative w-full">
-            <input type="text" id="search-input" class="input input-bordered input-lg w-full pr-12 focus:outline-none" placeholder="Tìm tài liệu..." autofocus />
-            <div id="search-loader" class="absolute right-4 top-1/2 -translate-y-1/2">
-                <span class="loading loading-spinner loading-sm text-base-content-50"></span>
+        <!-- Search Input + Results Main Content -->
+        <main class="flex flex-col gap-6 w-full">
+            <!-- Search Input Wrapper -->
+            <div class="relative w-full">
+                <label for="search-input" class="sr-only">Tìm tài liệu</label>
+                <input type="text" id="search-input" class="input input-bordered input-lg w-full pr-12 focus:outline-none" placeholder="Tìm tài liệu..." autofocus />
+                <div id="search-loader" class="absolute right-4 top-1/2 -translate-y-1/2">
+                    <span class="loading loading-spinner loading-sm text-base-content-70"></span>
+                </div>
             </div>
-        </div>
 
         <!-- Status / AI Model Setup Banner -->
         <div id="setup-banner" class="alert alert-warning py-3 px-4 shadow-sm text-sm font-medium hidden flex-row justify-between items-center gap-4">
@@ -168,29 +175,27 @@
         <div id="results-area" class="flex flex-col gap-6">
             <!-- Exact Match Section -->
             <div id="exact-section" class="flex flex-col gap-2 hidden">
-                <div class="flex items-center gap-2 text-xs font-semibold text-base-content-50 uppercase tracking-wider">
+                <h2 class="flex items-center gap-2 text-xs font-semibold text-base-content-85 uppercase tracking-wider">
                     <span>Chính xác</span>
                     <span id="exact-count" class="badge badge-sm badge-neutral">0</span>
-                </div>
+                </h2>
                 <div id="exact-list" class="flex flex-col gap-3"></div>
             </div>
 
             <!-- Suggested Match Section -->
             <div id="suggest-section" class="flex flex-col gap-2 hidden">
-                <div class="flex items-center gap-2 text-xs font-semibold text-base-content-50 uppercase tracking-wider">
+                <h2 class="flex items-center gap-2 text-xs font-semibold text-base-content-85 uppercase tracking-wider">
                     <span>Gợi ý</span>
                     <span id="suggest-count" class="badge badge-sm badge-neutral">0</span>
-                </div>
+                </h2>
                 <div id="suggest-list" class="flex flex-col gap-3"></div>
             </div>
 
             <!-- Empty State -->
-            <div id="empty-state" class="flex flex-col items-center justify-center py-12 text-center text-base-content-50">
+            <div id="empty-state" class="flex flex-col items-center justify-center py-12 text-center text-base-content-70">
                 <span id="empty-state-text">Nhập từ khóa để tìm tài liệu</span>
             </div>
-
-
-        </div>
+        </main>
     </div>
 
     <!-- Onboarding Modal -->
@@ -200,7 +205,7 @@
             <p class="text-sm text-base-content-70 text-center">Chọn thư mục tài liệu để bắt đầu</p>
             <div class="flex flex-col gap-3">
                 <button id="onboard-pick-btn" onclick="triggerOnboardPicker()" class="btn btn-primary w-full">Chọn thư mục...</button>
-                <span id="onboard-path" class="text-sm text-base-content-50 truncate text-center block">Chưa chọn thư mục</span>
+                <span id="onboard-path" class="text-sm text-base-content-70 truncate text-center block">Chưa chọn thư mục</span>
                 <div id="onboard-status" class="text-xs text-info font-medium hidden text-center"></div>
                 <button id="onboard-start-btn" onclick="startOnboarding()" class="btn btn-primary w-full hidden">Bắt đầu lập chỉ mục</button>
             </div>
@@ -221,14 +226,14 @@
             </h3>
             <div class="py-4 flex flex-col gap-4">
                 <div>
-                    <h4 class="text-xs font-semibold uppercase tracking-wider text-base-content-50 mb-2">Thư mục đã lập chỉ mục</h4>
+                    <h4 class="text-xs font-semibold uppercase tracking-wider text-base-content-70 mb-2">Thư mục đã lập chỉ mục</h4>
                     <div id="folders-list" class="flex flex-col gap-2 max-h-48 overflow-y-auto">
                         <!-- Folders list renders here -->
                     </div>
                 </div>
                 <div class="divider"></div>
                 <div class="flex flex-col gap-2">
-                    <h4 class="text-xs font-semibold uppercase tracking-wider text-base-content-50 mb-2">Thêm thư mục mới</h4>
+                    <h4 class="text-xs font-semibold uppercase tracking-wider text-base-content-70 mb-2">Thêm thư mục mới</h4>
                     <div class="flex gap-2 items-center">
                         <button onclick="triggerFolderPicker()" class="btn btn-sm btn-outline">Chọn thư mục...</button>
                         <span id="chosen-path" class="text-xs font-mono text-base-content-70 truncate max-w-xs">Chưa chọn</span>
@@ -254,7 +259,7 @@
             </h3>
             <div class="py-4 flex flex-col gap-4">
                 <div class="flex flex-col gap-1">
-                    <span class="text-xs font-semibold text-base-content-50 uppercase tracking-wider">Đường dẫn:</span>
+                    <span class="text-xs font-semibold text-base-content-70 uppercase tracking-wider">Đường dẫn:</span>
                     <div class="flex gap-2 items-center justify-between bg-base-200 p-2 rounded border border-base-300">
                         <span id="detail-filepath" class="font-mono text-xs text-base-content select-all break-all pr-4"></span>
                         <button id="detail-copy-btn" class="btn btn-xs btn-square btn-ghost shrink-0 opacity-60 hover:opacity-100" title="Sao chép đường dẫn">
@@ -263,11 +268,11 @@
                     </div>
                 </div>
                 <div class="flex flex-col gap-1">
-                    <span class="text-xs font-semibold text-base-content-50 uppercase tracking-wider">Điểm số (Score):</span>
+                    <span class="text-xs font-semibold text-base-content-70 uppercase tracking-wider">Điểm số (Score):</span>
                     <span id="detail-score" class="font-mono text-xs text-base-content bg-base-200 px-2 py-1 rounded border border-base-300 w-fit"></span>
                 </div>
                 <div class="flex flex-col gap-1">
-                    <span class="text-xs font-semibold text-base-content-50 uppercase tracking-wider">Nội dung đoạn trích:</span>
+                    <span class="text-xs font-semibold text-base-content-70 uppercase tracking-wider">Nội dung đoạn trích:</span>
                     <div id="detail-content" class="text-sm leading-relaxed text-base-content bg-base-200 border border-base-300 rounded-lg p-4 max-h-[300px] overflow-y-auto whitespace-pre-wrap break-words"></div>
                 </div>
             </div>
@@ -515,9 +520,9 @@
                     <div class="flex flex-col gap-0.5">
                         <div class="flex justify-between items-start gap-2">
                             <a class="filename-link font-bold text-sm text-base-content hover:text-primary transition-colors truncate" onclick="event.stopPropagation(); showDetailFromJSON(this.getAttribute('data-json'))" data-json="${jsonStr}" title="Xem chi tiết">${filename}</a>
-                            <span class="badge badge-sm badge-outline font-mono text-[10px] text-base-content-60 shrink-0">Score: ${displayScore}</span>
+                            <span class="badge badge-sm badge-outline font-mono text-[10px] text-base-content-70 shrink-0">Score: ${displayScore}</span>
                         </div>
-                        <div class="flex items-center justify-between text-xs text-base-content-50 gap-2">
+                        <div class="flex items-center justify-between text-xs text-base-content-70 gap-2">
                             <span class="truncate" title="${escapedPath}">${escapedPath}</span>
                             <button class="btn btn-xs btn-square btn-ghost shrink-0 opacity-60 hover:opacity-100" onclick="event.stopPropagation(); copyToClipboard('${escapedPath}')" title="Sao chép đường dẫn">
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
