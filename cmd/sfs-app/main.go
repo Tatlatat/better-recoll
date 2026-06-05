@@ -35,6 +35,9 @@ var (
 
 	indexedFoldersMutex sync.Mutex
 	indexedFolders      []string
+
+	isBarVisible        bool = true
+	currentView         string = "search"
 )
 
 // Reuse the exact same HTML and handlers from cmd/sfs-server/main.go
@@ -735,6 +738,12 @@ const htmlContent = `<!DOCTYPE html>
                 if (nav) nav.style.display = 'none';
                 if (header) header.style.display = 'none';
                 adjustWindowSize();
+                setTimeout(() => {
+                    if (searchInput) {
+                        searchInput.focus();
+                        searchInput.select();
+                    }
+                }, 50);
             } else if (viewName === 'setting') {
                 document.body.classList.remove('search-mode');
                 document.getElementById('setting-view').style.display = 'flex';
@@ -941,8 +950,17 @@ const htmlContent = `<!DOCTYPE html>
                 '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>' +
                 '<div>' + displayMsg + '</div>' +
                 '</div>';
-            exactList.innerHTML = errorHTML;
-            suggestList.innerHTML = errorHTML;
+            
+            const exactSection = document.getElementById('exact-section');
+            const suggestSection = document.getElementById('suggest-section');
+            const resultsMessage = document.getElementById('results-message');
+
+            exactSection.style.display = 'none';
+            suggestSection.style.display = 'none';
+            resultsMessage.style.display = 'flex';
+            resultsMessage.innerHTML = errorHTML;
+
+            adjustWindowSize();
         }
 
         function renderResults(data) {
@@ -955,23 +973,34 @@ const htmlContent = `<!DOCTYPE html>
             suggestCount.textContent = suggest.length;
             suggestCount.style.display = suggest.length > 0 ? 'inline-block' : 'none';
 
-            if (exact.length === 0) {
-                exactList.innerHTML = '<div class="empty-state">' +
-                    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>' +
-                    '<div>Không có kết quả chính xác</div>' +
-                    '</div>';
+            const exactSection = document.getElementById('exact-section');
+            const suggestSection = document.getElementById('suggest-section');
+            const resultsMessage = document.getElementById('results-message');
+
+            if (exact.length === 0 && suggest.length === 0) {
+                exactSection.style.display = 'none';
+                suggestSection.style.display = 'none';
+                resultsMessage.style.display = 'flex';
+                resultsMessage.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></svg><div>Không tìm thấy kết quả</div>';
             } else {
-                exactList.innerHTML = exact.map(item => createCardHTML(item)).join('');
+                resultsMessage.style.display = 'none';
+                
+                if (exact.length > 0) {
+                    exactSection.style.display = 'flex';
+                    exactList.innerHTML = exact.map(item => createCardHTML(item)).join('');
+                } else {
+                    exactSection.style.display = 'none';
+                }
+
+                if (suggest.length > 0) {
+                    suggestSection.style.display = 'flex';
+                    suggestList.innerHTML = suggest.map(item => createCardHTML(item)).join('');
+                } else {
+                    suggestSection.style.display = 'none';
+                }
             }
 
-            if (suggest.length === 0) {
-                suggestList.innerHTML = '<div class="empty-state">' +
-                    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>' +
-                    '<div>Không có kết quả gợi ý</div>' +
-                    '</div>';
-            } else {
-                suggestList.innerHTML = suggest.map(item => createCardHTML(item)).join('');
-            }
+            adjustWindowSize();
         }
 
         function createCardHTML(item) {
@@ -1647,7 +1676,10 @@ func main() {
 	defer w.Destroy()
 
 	w.SetTitle("better-recoll")
-	w.SetSize(700, 500, webview.HintNone)
+	w.SetSize(640, 90, webview.HintNone)
+
+	// Make the window floating initially
+	makeFloating(w.Window())
 
 	// Bind folder picker
 	w.Bind("pickFolder", func() string {
@@ -1658,6 +1690,20 @@ func main() {
 			return ""
 		}
 		return strings.TrimSpace(string(out))
+	})
+
+	// Bind window operations
+	w.Bind("resizeWindow", func(width, height int) {
+		w.Dispatch(func() {
+			resizeWindow(w.Window(), width, height)
+		})
+	})
+
+	w.Bind("hideBar", func() {
+		w.Dispatch(func() {
+			hideWindow(w.Window())
+			isBarVisible = false
+		})
 	})
 
 	// Run systray in a goroutine
@@ -1674,15 +1720,24 @@ func main() {
 				select {
 				case <-mOpen.ClickedCh:
 					w.Dispatch(func() {
+						currentView = "search"
+						makeFloating(w.Window())
 						w.Navigate("http://localhost:" + port)
 						w.Eval("showView('search')")
+						showWindow(w.Window())
 						bringToFront()
+						isBarVisible = true
 					})
 				case <-mSetting.ClickedCh:
 					w.Dispatch(func() {
+						currentView = "settings"
+						makeNormalWindow(w.Window())
 						w.Navigate("http://localhost:" + port)
 						w.Eval("showView('setting')")
+						centerWindow(w.Window())
+						showWindow(w.Window())
 						bringToFront()
+						isBarVisible = true
 					})
 				case <-mQuit.ClickedCh:
 					systray.Quit()
@@ -1704,24 +1759,48 @@ func main() {
 	go func() {
 		time.Sleep(1 * time.Second)
 
-		hk := hotkey.New([]hotkey.Modifier{hotkey.ModCmd, hotkey.ModShift}, hotkey.KeySpace)
+		// ⌘⇧Space hay bị macOS chiếm (input source / Finder search) → app không nhận.
+		// Dùng ⌃⌥Space (Control+Option+Space) — ít xung đột hơn.
+		hk := hotkey.New([]hotkey.Modifier{hotkey.ModCtrl, hotkey.ModOption}, hotkey.KeySpace)
 		if err := hk.Register(); err != nil {
 			log.Printf("hotkey: failed to register: %v", err)
 			return
 		}
 		defer hk.Unregister()
 
-		log.Printf("hotkey registered: Cmd+Shift+Space")
+		log.Printf("hotkey registered: Control+Option+Space")
 		for range hk.Keydown() {
+			log.Printf("hotkey pressed → toggle floating bar")
 			w.Dispatch(func() {
-				w.Navigate("http://localhost:" + port)
-				w.Eval("showView('search')")
-				bringToFront()
+				if currentView == "settings" {
+					currentView = "search"
+					makeFloating(w.Window())
+					w.Navigate("http://localhost:" + port)
+					w.Eval("showView('search')")
+					showWindow(w.Window())
+					bringToFront()
+					isBarVisible = true
+				} else {
+					if isBarVisible {
+						hideWindow(w.Window())
+						isBarVisible = false
+					} else {
+						makeFloating(w.Window())
+						w.Navigate("http://localhost:" + port)
+						w.Eval("showView('search')")
+						showWindow(w.Window())
+						bringToFront()
+						isBarVisible = true
+					}
+				}
 			})
 		}
 	}()
 
 	w.Navigate("http://localhost:" + port)
+	w.Dispatch(func() {
+		w.Eval("showView('search')")
+	})
 	w.Run()
 }
 
