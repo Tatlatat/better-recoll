@@ -109,6 +109,18 @@ func (e *Engine) SearchRanked(query string, k int) (RankedResults, error) {
 		return candidates[i].Score > candidates[j].Score
 	})
 
+	// Deduplicate candidates by FilePath, keeping only the highest-scoring result per file path.
+	// Since candidates is already sorted descending, the first occurrence of each FilePath is the highest scoring one.
+	seen := make(map[string]bool)
+	var deduped []Result
+	for _, c := range candidates {
+		if !seen[c.FilePath] {
+			seen[c.FilePath] = true
+			deduped = append(deduped, c)
+		}
+	}
+	candidates = deduped
+
 	// Take top k candidates
 	if len(candidates) > k {
 		candidates = candidates[:k]
