@@ -12,15 +12,25 @@ void makeWindowFloating(void* wndPtr) {
     if (window == nil) {
         return;
     }
-    
-    // Set style mask to borderless
-    [window setStyleMask:NSWindowStyleMaskBorderless];
-    
-    // Make background transparent/clear
+
+    // QUAN TRỌNG: KHÔNG dùng NSWindowStyleMaskBorderless thuần — window đó trả
+    // NO từ canBecomeKeyWindow nên KHÔNG NHẬN bàn phím/chuột (lỗi gõ không được).
+    // Dùng Titled + FullSizeContentView rồi ẩn titlebar → trông như borderless
+    // NHƯNG vẫn nhận input.
+    [window setStyleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskFullSizeContentView | NSWindowStyleMaskResizable];
+    [window setTitlebarAppearsTransparent:YES];
+    [window setTitleVisibility:NSWindowTitleHidden];
+    [window setMovableByWindowBackground:YES];
+    // Ẩn 3 nút đỏ/vàng/xanh
+    [[window standardWindowButton:NSWindowCloseButton] setHidden:YES];
+    [[window standardWindowButton:NSWindowMiniaturizeButton] setHidden:YES];
+    [[window standardWindowButton:NSWindowZoomButton] setHidden:YES];
+
+    // Make background transparent/clear (glass cho qua từ CSS)
     [window setOpaque:NO];
     [window setBackgroundColor:[NSColor clearColor]];
     [window setHasShadow:YES];
-    
+
     // Set level to floating (above other windows)
     [window setLevel:NSFloatingWindowLevel];
     
@@ -94,9 +104,17 @@ void centerNSWindow(void* wndPtr) {
 void showNSWindow(void* wndPtr) {
     NSWindow* window = (NSWindow*)wndPtr;
     if (window == nil) return;
-    
-    [window makeKeyAndOrderFront:nil];
+
     [NSApp activateIgnoringOtherApps:YES];
+    [window makeKeyAndOrderFront:nil];
+    [window makeFirstResponder:[window contentView]];
+    // Bo góc mềm cho content (glass) + cắt viền thừa
+    NSView* cv = [window contentView];
+    if (cv != nil) {
+        [cv setWantsLayer:YES];
+        cv.layer.cornerRadius = 16.0;
+        cv.layer.masksToBounds = YES;
+    }
 }
 
 void hideNSWindow(void* wndPtr) {
