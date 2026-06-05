@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -188,6 +189,7 @@ func (e *Engine) IndexThrottled(dir string, opts IndexOptions) error {
 	defer e.mu.Unlock()
 
 	var pending []pendingChunk
+	skipped := 0
 	finder := dedupe.New(2)
 
 	cleanDir := filepath.Clean(dir)
@@ -233,7 +235,11 @@ func (e *Engine) IndexThrottled(dir string, opts IndexOptions) error {
 
 		text, err := reader.ReadFile(path)
 		if err != nil {
-			return fmt.Errorf("failed to read file %s: %w", path, err)
+			// Một file xấu KHÔNG được làm sập cả index — bỏ qua, ghi log, tiếp tục.
+			// Thư mục thật luôn có file lỗi (PDF hỏng, mã hoá lạ, v.v.).
+			log.Printf("bỏ qua (đọc lỗi) %s: %v", path, err)
+			skipped++
+			return nil
 		}
 
 		chunks := chunk.Chunk(text, 512)
@@ -250,6 +256,10 @@ func (e *Engine) IndexThrottled(dir string, opts IndexOptions) error {
 	})
 	if err != nil {
 		return err
+	}
+
+	if skipped > 0 {
+		log.Printf("index: bỏ qua %d file đọc lỗi, tiếp tục với %d đoạn", skipped, len(pending))
 	}
 
 	if len(pending) == 0 {

@@ -68,7 +68,8 @@ func main() {
 			}
 			text, err := reader.ReadFile(path)
 			if err != nil {
-				return err
+				// Bỏ qua file đọc lỗi (PDF hỏng, mã hoá lạ) — không làm sập việc đếm.
+				return nil
 			}
 			fileCount++
 			chunks := chunk.Chunk(text, 512)
