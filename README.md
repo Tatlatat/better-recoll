@@ -1,8 +1,28 @@
-# sfs — Tìm file theo nội dung (semantic file search)
+# better-recoll
+
+> **A lighter, smarter Recoll.** Semantic desktop file search that actually understands what you mean — in one Go binary, no Python/Qt/ollama/chromadb stack.
+
+> ⚠️ **Work in progress.** Đang phát triển tích cực, còn cải tiến nhiều. Bản hiện tại đã chạy đúng và đo được (xem [Số đo](#số-đo-đã-verify)), nhưng API/đóng gói còn thay đổi.
 
 Gõ một câu mô tả nội dung; máy trả về đúng file chứa nội dung đó — không cần nhớ tên file. Chạy **hoàn toàn trên máy** (không gửi tài liệu lên mạng), **song ngữ Việt–Anh** (kể cả không dấu / câu trộn), một lần tìm **dưới 1 giây**.
 
 Viết bằng **Go**, model **BGE-M3** (embedding) + **bge-reranker-v2-m3** (cross-encoder) chạy local qua **ONNX**.
+
+## Tại sao "better-recoll"?
+
+[Recoll](https://www.recoll.org/) là công cụ desktop search lâu đời và đáng nể — nhưng nó là một **full-text (keyword) engine** xây trên Xapian (C++), và phần semantic chỉ mới được *bolt thêm* dưới dạng script Python rời (ollama + chromadb). Chính tác giả Recoll viết rằng chạy một **reranking model** trên đó "đã chứng minh là bất khả thi", và embedding "rất chậm trên CPU".
+
+`better-recoll` đi thẳng vào đúng chỗ đó:
+
+| | Recoll | **better-recoll** |
+|---|---|---|
+| Lõi | Xapian (keyword) + semantic bolt-on | **semantic-first**, BM25 gọn cho keyword |
+| Reranker | tác giả nói *"proved impossible"* | ✅ **cross-encoder chạy thật, recall 1.00** |
+| Tiếng Việt | không có xử lý riêng | ✅ **không dấu + chéo Việt-Anh** (BGE-M3 đa ngữ) |
+| Đóng gói | Xapian + Qt + Python + ollama + chromadb | ✅ **một Go binary** (`sfs setup` tải model) |
+| Kết quả | một danh sách | ✅ **2 ô Chính xác / Gợi ý** (không giả vờ chắc) |
+
+Recoll vẫn **hơn** ở độ chín (20 năm), số định dạng file, và sức mạnh full-text của Xapian (phrase/wildcard/boolean). `better-recoll` không thay thế Recoll cho mọi việc — nó làm tốt đúng việc Recoll còn loay hoay: **hiểu nghĩa, tiếng Việt, gọn nhẹ**.
 
 ## Bốn ràng buộc cốt lõi
 1. **Khớp đúng** — kết quả chắc nằm ô "Chính xác", kết quả mờ nằm ô "Gợi ý" (không lừa người dùng).
@@ -73,4 +93,13 @@ go build -o sfs-gui ./cmd/sfs-gui
 Số candidate đưa vào cross-encoder = đánh đổi giữa tốc độ và recall. Mặc định **5** (dưới 1s trên CPU M-series). Máy mạnh tăng (12+) cho recall cao hơn; máy yếu giảm. Hai lớp BM25+vector đã lọc trước nên top-5 gần như luôn chứa đáp án đúng.
 
 ## Trạng thái
-6/6 wave hoàn thành: model+parity → module nền → store+index+engine → rerank+2 ô → dedupe+diff-embed+router+watcher → GUI+int8+tốc độ. Pipeline đầu-cuối chạy thật, đo được, dưới 1 giây.
+
+**Work in progress** — đang phát triển tích cực. Lõi đã chạy đúng và đo được: model+parity → module nền → store+index+engine → rerank+2 ô → dedupe+diff-embed+router+watcher → GUI+int8+tốc độ. Pipeline đầu-cuối chạy thật, đo được, dưới 1 giây.
+
+Roadmap còn cải tiến: nhiều định dạng file hơn (email, ebook, OCR ảnh scan), calibrate ngưỡng 2 ô với data lớn, đo định lượng diff-embed, đóng gói binary cho Windows/Linux, tận dụng phần cứng máy văn phòng (Neural Engine / GPU) cho embed nhanh hơn.
+
+## License
+
+**[PolyForm Noncommercial License 1.0.0](LICENSE)** — miễn phí cho **cá nhân, học tập, nghiên cứu, hobby, tổ chức phi lợi nhuận**.
+
+**Dùng cho doanh nghiệp / thương mại / kiếm tiền cần xin license riêng** — liên hệ maintainer ([@Tatlatat](https://github.com/Tatlatat)).
