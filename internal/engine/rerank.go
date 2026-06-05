@@ -16,6 +16,10 @@ import (
 // rác (~0.00002) vẫn rớt rõ xuống Gợi ý.
 const ExactThreshold = 0.05
 
+// SuggestThreshold: ngưỡng tối thiểu để đưa kết quả vào ô "Gợi ý".
+// Kết quả dưới ngưỡng này sẽ bị loại bỏ hoàn toàn (dropped) để tránh hiển thị kết quả rác.
+const SuggestThreshold = 0.01
+
 // RankedResults holds search results partitioned into Exact (prob >= ExactThreshold)
 // and Suggest (prob < ExactThreshold) buckets after cross-encoder reranking.
 type RankedResults struct {
@@ -133,7 +137,7 @@ func (e *Engine) SearchRanked(query string, k int) (RankedResults, error) {
 		candidates = candidates[:k]
 	}
 
-	// Bucket candidates based on sigmoid(logit) vs ExactThreshold
+	// Bucket candidates based on sigmoid(logit) vs ExactThreshold and SuggestThreshold
 	var exact []Result
 	var suggest []Result
 	for _, c := range candidates {
@@ -141,7 +145,7 @@ func (e *Engine) SearchRanked(query string, k int) (RankedResults, error) {
 		c.Score = prob
 		if prob >= ExactThreshold {
 			exact = append(exact, c)
-		} else {
+		} else if prob >= SuggestThreshold {
 			suggest = append(suggest, c)
 		}
 	}

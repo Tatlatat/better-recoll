@@ -453,12 +453,15 @@ func findSafeTrees(dirPath string, primaryDir string) (bool, []string) {
 		return false, nil
 	}
 
-	if strings.HasPrefix(name, ".") ||
-		strings.EqualFold(name, "Library") ||
-		strings.EqualFold(name, "System") ||
-		strings.EqualFold(name, "node_modules") ||
-		strings.EqualFold(name, "caches") ||
-		strings.EqualFold(name, "cache") {
+	if strings.HasPrefix(name, ".") {
+		return false, nil
+	}
+
+	lowerName := strings.ToLower(name)
+	switch lowerName {
+	case "library", "system", "node_modules", "caches", "cache",
+		"build", "deriveddata", "checkouts", "sourcepackages",
+		"pods", "vendor", "dist", "target", "__pycache__":
 		return false, nil
 	}
 
