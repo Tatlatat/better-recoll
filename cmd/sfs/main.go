@@ -16,7 +16,7 @@ import (
 
 func printUsage() {
 	fmt.Println("Usage:")
-	fmt.Println("  sfs setup           Download required model files")
+	fmt.Println("  sfs setup [--light] Download required model files")
 	fmt.Println("  sfs index <dir>      Index a directory")
 	fmt.Println("  sfs search <query>  Search for a query")
 }
@@ -158,12 +158,25 @@ func main() {
 		printBucket("GỢI Ý:", results.Suggest)
 
 	case "setup":
-		if len(os.Args) > 2 && (os.Args[2] == "--help" || os.Args[2] == "-h") {
-			fmt.Println("Usage: sfs setup")
-			fmt.Println("Downloads the required BGE-M3 ONNX models and configuration files.")
-			os.Exit(0)
+		light := false
+		if len(os.Args) > 2 {
+			for _, arg := range os.Args[2:] {
+				if arg == "--light" {
+					light = true
+				} else if arg == "--help" || arg == "-h" {
+					fmt.Println("Usage: sfs setup [--light]")
+					fmt.Println("Downloads the required BGE-M3 and BGE-Reranker ONNX models and configuration files.")
+					fmt.Println("Options:")
+					fmt.Println("  --light  Download the int8 quantized reranker model instead of the full model")
+					os.Exit(0)
+				} else {
+					fmt.Printf("Error: unknown argument %q\n", arg)
+					fmt.Println("Usage: sfs setup [--light]")
+					os.Exit(1)
+				}
+			}
 		}
-		runSetup()
+		runSetup(light)
 
 	default:
 		fmt.Printf("Error: unknown subcommand %q\n", cmd)
@@ -173,11 +186,12 @@ func main() {
 }
 
 type progressWriter struct {
-	filename    string
-	totalBytes  int64
-	written     int64
-	lastPrinted int64
-	writer      io.Writer
+	filename           string
+	totalBytes         int64
+	written            int64
+	lastPrintedPercent int
+	lastPrintedMB      int64
+	writer             io.Writer
 }
 
 func (pw *progressWriter) Write(p []byte) (int, error) {
@@ -187,17 +201,33 @@ func (pw *progressWriter) Write(p []byte) (int, error) {
 	}
 	pw.written += int64(n)
 	currentMB := pw.written / (1024 * 1024)
-	if currentMB > pw.lastPrinted {
-		pw.lastPrinted = currentMB
-		if pw.totalBytes > 0 {
-			totalMB := pw.totalBytes / (1024 * 1024)
-			fmt.Printf("\rDownloading %s: %d MB / %d MB...", pw.filename, currentMB, totalMB)
-		} else {
-			fmt.Printf("\rDownloading %s: %d MB...", pw.filename, currentMB)
+
+	if pw.totalBytes > 0 {
+		totalMB := pw.totalBytes / (1024 * 1024)
+		percent := int(pw.written * 100 / pw.totalBytes)
+		if percent >= pw.lastPrintedPercent+1 || currentMB >= pw.lastPrintedMB+10 {
+			pw.lastPrintedPercent = percent
+			pw.lastPrintedMB = currentMB
+			fmt.Printf("\rDownloading %s: %d / %d MB (%d%%)", pw.filename, currentMB, totalMB, percent)
+			os.Stdout.Sync()
 		}
-		os.Stdout.Sync()
+	} else {
+		if currentMB >= pw.lastPrintedMB+10 {
+			pw.lastPrintedMB = currentMB
+			fmt.Printf("\rDownloading %s: %d MB...", pw.filename, currentMB)
+			os.Stdout.Sync()
+		}
 	}
 	return n, nil
+}
+
+type HTTPError struct {
+	StatusCode int
+	Status     string
+}
+
+func (e *HTTPError) Error() string {
+	return fmt.Sprintf("bad status: %s", e.Status)
 }
 
 func downloadFile(url string, destPath string) error {
@@ -212,6 +242,8 @@ func downloadFile(url string, destPath string) error {
 			resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {
 				expectedSize = resp.ContentLength
+			} else if resp.StatusCode == http.StatusNotFound {
+				return &HTTPError{StatusCode: resp.StatusCode, Status: resp.Status}
 			}
 		}
 	}
@@ -231,7 +263,7 @@ func downloadFile(url string, destPath string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("bad status: %s", resp.Status)
+		return &HTTPError{StatusCode: resp.StatusCode, Status: resp.Status}
 	}
 
 	if resp.ContentLength > 0 {
@@ -254,9 +286,11 @@ func downloadFile(url string, destPath string) error {
 	defer out.Close()
 
 	pw := &progressWriter{
-		filename:   filename,
-		totalBytes: expectedSize,
-		writer:     out,
+		filename:           filename,
+		totalBytes:         expectedSize,
+		writer:             out,
+		lastPrintedPercent: -1,
+		lastPrintedMB:      -10,
 	}
 
 	fmt.Printf("Downloading %s...", filename)
@@ -272,7 +306,7 @@ func downloadFile(url string, destPath string) error {
 	return nil
 }
 
-func runSetup() {
+func runSetup(light bool) {
 	root := model.DefaultModelRoot()
 	if root == "." {
 		if homeDir, err := os.UserHomeDir(); err == nil {
@@ -297,7 +331,8 @@ func runSetup() {
 		os.Exit(1)
 	}
 
-	files := []struct {
+	// 1. Download BGE-M3 (always full model)
+	bgeM3Files := []struct {
 		srcPath  string
 		destName string
 	}{
@@ -310,22 +345,71 @@ func runSetup() {
 		{srcPath: "sentencepiece.bpe.model", destName: "sentencepiece.bpe.model"},
 	}
 
-	baseURL := "https://huggingface.co/BAAI/bge-m3/resolve/main/"
+	bgeM3BaseURL := "https://huggingface.co/BAAI/bge-m3/resolve/main/"
 
-	for _, file := range files {
-		url := fmt.Sprintf("%s%s?download=true", baseURL, file.srcPath)
+	fmt.Println("\n--- Downloading BGE-M3 ---")
+	for _, file := range bgeM3Files {
+		url := fmt.Sprintf("%s%s?download=true", bgeM3BaseURL, file.srcPath)
 		destPath := filepath.Join(bgeM3Dir, file.destName)
 
 		if err := downloadFile(url, destPath); err != nil {
+			if httpErr, ok := err.(*HTTPError); ok && httpErr.StatusCode == http.StatusNotFound && file.destName == "special_tokens_map.json" {
+				fmt.Printf("\nSkipping optional file %s (not found).\n", file.destName)
+				continue
+			}
 			fmt.Fprintf(os.Stderr, "\nError downloading %s: %v\n", file.destName, err)
 			os.Exit(1)
 		}
 	}
 
 	fmt.Println("\nSetup for BAAI/bge-m3 completed successfully.")
-	fmt.Println("\nNote: BAAI/bge-reranker is not pre-exported to ONNX on Hugging Face.")
-	fmt.Println("To use the reranker, you must export it separately using optimum-cli:")
-	fmt.Println("  pip install optimum[onnxruntime]")
-	fmt.Println("  optimum-cli export onnx --model BAAI/bge-reranker-large --task text-classification <dest_dir>")
-	fmt.Printf("Where <dest_dir> should be: %s\n", bgeRerankerDir)
+
+	// 2. Download BGE-Reranker (optionally light)
+	var rerankerFiles []struct {
+		srcPath  string
+		destName string
+	}
+	if light {
+		rerankerFiles = []struct {
+			srcPath  string
+			destName string
+		}{
+			{srcPath: "onnx/model_int8.onnx", destName: "model.onnx"},
+			{srcPath: "tokenizer.json", destName: "tokenizer.json"},
+			{srcPath: "tokenizer_config.json", destName: "tokenizer_config.json"},
+			{srcPath: "special_tokens_map.json", destName: "special_tokens_map.json"},
+			{srcPath: "config.json", destName: "config.json"},
+		}
+	} else {
+		rerankerFiles = []struct {
+			srcPath  string
+			destName string
+		}{
+			{srcPath: "onnx/model.onnx", destName: "model.onnx"},
+			{srcPath: "onnx/model.onnx_data", destName: "model.onnx_data"},
+			{srcPath: "tokenizer.json", destName: "tokenizer.json"},
+			{srcPath: "tokenizer_config.json", destName: "tokenizer_config.json"},
+			{srcPath: "special_tokens_map.json", destName: "special_tokens_map.json"},
+			{srcPath: "config.json", destName: "config.json"},
+		}
+	}
+
+	bgeRerankerBaseURL := "https://huggingface.co/onnx-community/bge-reranker-v2-m3-ONNX/resolve/main/"
+
+	fmt.Println("\n--- Downloading BGE-Reranker ---")
+	for _, file := range rerankerFiles {
+		url := fmt.Sprintf("%s%s?download=true", bgeRerankerBaseURL, file.srcPath)
+		destPath := filepath.Join(bgeRerankerDir, file.destName)
+
+		if err := downloadFile(url, destPath); err != nil {
+			if httpErr, ok := err.(*HTTPError); ok && httpErr.StatusCode == http.StatusNotFound && file.destName == "special_tokens_map.json" {
+				fmt.Printf("\nSkipping optional file %s (not found).\n", file.destName)
+				continue
+			}
+			fmt.Fprintf(os.Stderr, "\nError downloading %s: %v\n", file.destName, err)
+			os.Exit(1)
+		}
+	}
+
+	fmt.Println("\nSetup for onnx-community/bge-reranker-v2-m3-ONNX completed successfully.")
 }
