@@ -116,6 +116,13 @@
             background-color: rgba(0, 0, 0, 0.3);
             backdrop-filter: blur(4px);
         }
+        
+        #search-loader {
+            display: none !important;
+        }
+        #search-loader.visible {
+            display: block !important;
+        }
     </style>
 </head>
 <body class="bg-base-200 text-base-content min-h-screen">
@@ -123,7 +130,13 @@
     <div class="mx-auto max-w-640 px-4 py-8 flex flex-col gap-6" id="main-container">
         <!-- Top Navigation Area -->
         <div class="flex justify-between items-center w-full pb-2" id="top-nav">
-            <span class="text-xs font-semibold uppercase tracking-wider text-base-content-60">better-recoll</span>
+            <div class="flex items-center gap-2">
+                <span class="text-xs font-semibold uppercase tracking-wider text-base-content-60">better-recoll</span>
+                <div id="indexing-badge" class="badge badge-warning badge-xs gap-1 hidden py-1.5 px-2">
+                    <span class="loading loading-spinner" style="width: 0.75rem; height: 0.75rem;"></span>
+                    <span class="font-semibold" style="font-size: 10px;">Đang lập chỉ mục...</span>
+                </div>
+            </div>
             <button onclick="openSettings()" class="btn btn-ghost btn-sm btn-circle" title="Cài đặt">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4 text-base-content-70">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.43l-1.003.828c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.99l1.005.831a1.125 1.125 0 0 1 .26 1.43l-1.297 2.247a1.125 1.125 0 0 1-1.37.491l-1.216-.456c-.356-.133-.751-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.552 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.43l1.004-.83c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
@@ -135,7 +148,7 @@
         <!-- Search Input Wrapper -->
         <div class="relative w-full">
             <input type="text" id="search-input" class="input input-bordered input-lg w-full pr-12 focus:outline-none" placeholder="Tìm tài liệu..." autofocus />
-            <div id="search-loader" class="absolute right-4 top-1/2 -translate-y-1/2 hidden">
+            <div id="search-loader" class="absolute right-4 top-1/2 -translate-y-1/2">
                 <span class="loading loading-spinner loading-sm text-base-content-50"></span>
             </div>
         </div>
@@ -176,10 +189,7 @@
                 <span id="empty-state-text">Nhập từ khóa để tìm tài liệu</span>
             </div>
 
-            <!-- Indexing More Status Message -->
-            <div id="indexing-more-msg" class="alert alert-info py-2 px-4 shadow-sm text-sm font-medium hidden">
-                <div class="text-info-content text-center w-full">⏳ Đang lập chỉ mục thêm tài liệu, kết quả sẽ đầy đủ hơn sau...</div>
-            </div>
+
         </div>
     </div>
 
@@ -369,14 +379,13 @@
                 resetUI();
                 return;
             }
-            loader.classList.remove('hidden');
             debounceTimer = setTimeout(() => {
                 fetchResults(query);
             }, 250);
         });
 
         function resetUI() {
-            loader.classList.add('hidden');
+            loader.classList.remove('visible');
             document.getElementById('exact-section').classList.add('hidden');
             document.getElementById('suggest-section').classList.add('hidden');
             
@@ -387,6 +396,7 @@
         }
 
         async function fetchResults(query) {
+            loader.classList.add('visible');
             try {
                 const response = await fetch('/api/search?q=' + encodeURIComponent(query));
                 if (!response.ok) {
@@ -402,7 +412,7 @@
                 console.error(err);
                 showErrorState(err.message);
             } finally {
-                loader.classList.add('hidden');
+                loader.classList.remove('visible');
             }
         }
 
@@ -411,11 +421,9 @@
             const exactSection = document.getElementById('exact-section');
             const suggestSection = document.getElementById('suggest-section');
             const emptyState = document.getElementById('empty-state');
-            const indexingMoreMsg = document.getElementById('indexing-more-msg');
             
             exactSection.classList.add('hidden');
             suggestSection.classList.add('hidden');
-            indexingMoreMsg.classList.add('hidden');
             
             emptyState.classList.remove('hidden');
             emptyState.innerHTML = `<div class="text-error font-medium">${displayMsg}</div>`;
@@ -434,7 +442,6 @@
             const exactSection = document.getElementById('exact-section');
             const suggestSection = document.getElementById('suggest-section');
             const emptyState = document.getElementById('empty-state');
-            const indexingMoreMsg = document.getElementById('indexing-more-msg');
 
             if (totalResults === 0) {
                 exactSection.classList.add('hidden');
@@ -458,54 +465,21 @@
                     suggestSection.classList.add('hidden');
                     suggestList.innerHTML = '';
                 }
-
-                if (isIndexingActive && totalResults < 3) {
-                    indexingMoreMsg.classList.remove('hidden');
-                } else {
-                    indexingMoreMsg.classList.add('hidden');
-                }
             }
             adjustWindowSize();
         }
 
         function updateEmptyState(query) {
             const emptyState = document.getElementById('empty-state');
-            const indexingMoreMsg = document.getElementById('indexing-more-msg');
             
             if (!query) {
-                if (isIndexingActive) {
-                    emptyState.innerHTML = `
-                        <div class="flex flex-col items-center gap-3">
-                            <span class="text-sm opacity-75">Nhập từ khóa để tìm tài liệu</span>
-                            <div class="badge badge-warning gap-2 py-3 px-4">
-                                <span class="loading loading-spinner loading-xs"></span>
-                                <span class="text-xs font-semibold">${indexingMessageText || "Đang lập chỉ mục..."}</span>
-                            </div>
-                        </div>
-                    `;
-                } else {
-                    emptyState.innerHTML = `
-                        <span class="text-sm opacity-75">Nhập từ khóa để tìm tài liệu</span>
-                    `;
-                }
-                indexingMoreMsg.classList.add('hidden');
+                emptyState.innerHTML = `
+                    <span class="text-sm opacity-75">Nhập từ khóa để tìm tài liệu</span>
+                `;
             } else {
-                if (isIndexingActive) {
-                    emptyState.innerHTML = `
-                        <div class="flex flex-col items-center gap-3">
-                            <div class="badge badge-warning gap-2 py-3 px-4">
-                                <span class="loading loading-spinner loading-xs"></span>
-                                <span class="text-xs font-semibold">Đang lập chỉ mục...</span>
-                            </div>
-                            <span class="text-sm font-medium text-info mt-2 text-center">⏳ Đang lập chỉ mục thêm tài liệu, kết quả sẽ đầy đủ hơn sau...</span>
-                        </div>
-                    `;
-                } else {
-                    emptyState.innerHTML = `
-                        <span class="text-sm opacity-75">Không tìm thấy kết quả</span>
-                    `;
-                }
-                indexingMoreMsg.classList.add('hidden');
+                emptyState.innerHTML = `
+                    <span class="text-sm opacity-75">Không tìm thấy kết quả</span>
+                `;
             }
             adjustWindowSize();
         }
@@ -814,6 +788,18 @@
                     indexingMessageText = prefix + status.currentDir + ' (' + status.filesIndexed + ' file)...';
                 } else {
                     indexingMessageText = '';
+                }
+
+                // Update header indexing badge
+                const indexingBadge = document.getElementById('indexing-badge');
+                if (indexingBadge) {
+                    if (isIndexingActive) {
+                        indexingBadge.classList.remove('hidden');
+                        indexingBadge.title = indexingMessageText || 'Đang lập chỉ mục...';
+                    } else {
+                        indexingBadge.classList.add('hidden');
+                        indexingBadge.title = '';
+                    }
                 }
 
                 // AI Model Setup Banner
