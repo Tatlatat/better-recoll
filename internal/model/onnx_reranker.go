@@ -9,6 +9,8 @@ import (
 	ort "github.com/yalue/onnxruntime_go"
 )
 
+const maxSeqLen = 256
+
 type OnnxReranker struct {
 	tokenizer *tokenizers.Tokenizer
 	session   *ort.DynamicAdvancedSession
@@ -31,7 +33,7 @@ func NewOnnxReranker(modelPath, tokenizerPath string) (*OnnxReranker, error) {
 		return nil, fmt.Errorf("failed to load tokenizer from %s: %w", tokenizerFile, err)
 	}
 
-	// Create session
+	// Create session (CPU — ổn định với external-data model; van RerankK lo tốc độ).
 	session, err := ort.NewDynamicAdvancedSession(
 		modelPath,
 		[]string{"input_ids", "attention_mask"},
@@ -91,13 +93,22 @@ func (r *OnnxReranker) Score(query string, texts []string) ([]float32, error) {
 
 		// XLM-RoBERTa cross-encoder pair format: <s> query </s></s> text </s>
 		// IDs mapping: bos = 0, eos = 2
-		combined := make([]int64, 0, 1+len(queryIds)+2+len(textIds)+1)
+		textLen := len(textIds)
+		maxTextLen := maxSeqLen - len(queryIds) - 4
+		if maxTextLen < 0 {
+			maxTextLen = 0
+		}
+		if textLen > maxTextLen {
+			textLen = maxTextLen
+		}
+
+		combined := make([]int64, 0, 1+len(queryIds)+2+textLen+1)
 		combined = append(combined, 0)
 		for _, id := range queryIds {
 			combined = append(combined, int64(id))
 		}
 		combined = append(combined, 2, 2)
-		for _, id := range textIds {
+		for _, id := range textIds[:textLen] {
 			combined = append(combined, int64(id))
 		}
 		combined = append(combined, 2)

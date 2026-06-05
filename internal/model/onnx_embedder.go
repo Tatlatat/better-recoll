@@ -45,7 +45,7 @@ func NewOnnxEmbedder(cfg OnnxConfig) (*OnnxEmbedder, error) {
 		return nil, fmt.Errorf("failed to load tokenizer from %s: %w", tokenizerFile, err)
 	}
 
-	// Create session
+	// Create session (CPU — ổn định với external-data model).
 	session, err := ort.NewDynamicAdvancedSession(
 		cfg.ModelPath,
 		[]string{"input_ids", "attention_mask"},
@@ -221,3 +221,4 @@ func (e *OnnxEmbedder) Rerank(query string, texts []string) ([]float32, error) {
 func (e *OnnxEmbedder) Dim() int {
 	return 1024
 }
+

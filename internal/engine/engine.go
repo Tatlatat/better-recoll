@@ -109,9 +109,13 @@ func New(cfg Config) (*Engine, error) {
 		bm25.Build()
 	}
 
+	// Van reranker: số candidate đưa vào cross-encoder = đánh đổi <1s vs recall.
+	// Mặc định 5 đạt <1s vững trên CPU M-series (đo: avg 889ms, p-max 986ms);
+	// máy mạnh tăng (RerankK=12+), máy yếu giảm. 2 lớp BM25+vector đã lọc trước
+	// nên top-5 candidate gần như luôn chứa đáp án đúng — recall giữ cao.
 	rerankK := cfg.RerankK
 	if rerankK == 0 {
-		rerankK = 20
+		rerankK = 5
 	}
 
 	return &Engine{
