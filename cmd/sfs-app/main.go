@@ -49,8 +49,8 @@ const htmlContent = `<!DOCTYPE html>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-color: #0b0f19;
-            --panel-bg: rgba(17, 24, 39, 0.7);
+            --bg-color: transparent;
+            --panel-bg: rgba(15, 23, 42, 0.85);
             --border-color: rgba(255, 255, 255, 0.08);
             --text-primary: #f3f4f6;
             --text-secondary: #9ca3af;
@@ -70,7 +70,7 @@ const htmlContent = `<!DOCTYPE html>
         }
         
         body {
-            background-color: var(--bg-color);
+            background-color: #0b0f19;
             color: var(--text-primary);
             font-family: var(--font-main);
             min-height: 100vh;
@@ -79,6 +79,7 @@ const htmlContent = `<!DOCTYPE html>
             align-items: center;
             padding: 1.5rem 1rem;
             overflow-x: hidden;
+            transition: background-color 0.2s;
         }
 
         /* Ambient background glow */
@@ -101,6 +102,55 @@ const htmlContent = `<!DOCTYPE html>
             display: flex;
             flex-direction: column;
             gap: 1.5rem;
+            transition: max-width 0.2s;
+        }
+
+        /* Search mode overrides */
+        body.search-mode {
+            background-color: transparent !important;
+            padding: 0;
+            margin: 0;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: auto;
+        }
+
+        body.search-mode .container {
+            max-width: 640px;
+            width: 640px;
+            background: rgba(15, 23, 42, 0.9);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 12px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.4);
+            padding: 12px;
+            gap: 12px;
+            overflow: hidden;
+            margin: 0;
+        }
+
+        body.search-mode .search-container {
+            max-width: 100%;
+            margin: 0;
+        }
+
+        body.search-mode .search-input {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 8px;
+            font-size: 1.15rem;
+            padding: 0.85rem 1.25rem 0.85rem 3.25rem;
+            box-shadow: none;
+            backdrop-filter: none;
+        }
+
+        body.search-mode .search-icon {
+            left: 1.1rem;
+            width: 1.35rem;
+            height: 1.35rem;
         }
 
         /* Navigation styling */
@@ -294,17 +344,28 @@ const htmlContent = `<!DOCTYPE html>
             100% { transform: rotate(360deg); }
         }
 
-        .results-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 1.5rem;
-            margin-top: 0.5rem;
+        .results-container {
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+            width: 100%;
+            max-height: 480px;
+            overflow-y: auto;
+            padding-right: 4px;
         }
-
-        @media (max-width: 868px) {
-            .results-grid {
-                grid-template-columns: 1fr;
-            }
+        
+        .results-container::-webkit-scrollbar {
+            width: 6px;
+        }
+        .results-container::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .results-container::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 3px;
+        }
+        .results-container::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.3);
         }
 
         .results-column {
@@ -316,7 +377,13 @@ const htmlContent = `<!DOCTYPE html>
             display: flex;
             flex-direction: column;
             gap: 1.25rem;
-            min-height: 300px;
+            min-height: auto;
+        }
+
+        .results-section {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
         }
 
         .column-header {
@@ -367,27 +434,24 @@ const htmlContent = `<!DOCTYPE html>
         .results-list {
             display: flex;
             flex-direction: column;
-            gap: 1rem;
+            gap: 0.75rem;
         }
 
         .result-card {
             background: rgba(255, 255, 255, 0.02);
             border: 1px solid var(--border-color);
-            border-radius: 12px;
-            padding: 1rem;
-            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-            position: relative;
-            overflow: hidden;
+            border-radius: 8px;
+            padding: 0.75rem 1rem;
+            transition: all 0.15s ease-in-out;
             display: flex;
             flex-direction: column;
-            gap: 0.75rem;
+            gap: 0.5rem;
         }
 
         .result-card:hover {
-            transform: translateY(-2px);
-            background: rgba(255, 255, 255, 0.04);
-            border-color: rgba(255, 255, 255, 0.15);
-            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(255, 255, 255, 0.12);
+            transform: translateY(-1px);
         }
 
         .result-header {
@@ -401,7 +465,7 @@ const htmlContent = `<!DOCTYPE html>
             display: flex;
             align-items: center;
             gap: 0.5rem;
-            max-width: 80%;
+            max-width: 100%;
         }
 
         .file-path {
@@ -436,6 +500,7 @@ const htmlContent = `<!DOCTYPE html>
             padding: 0.2rem 0.5rem;
             border-radius: 6px;
             font-family: monospace;
+            white-space: nowrap;
         }
 
         .exact .score-badge {
@@ -465,16 +530,16 @@ const htmlContent = `<!DOCTYPE html>
             justify-content: center;
             color: var(--text-secondary);
             text-align: center;
-            padding: 3rem 1rem;
+            padding: 2.5rem 1rem;
             gap: 0.5rem;
             height: 100%;
         }
 
         .empty-state svg {
-            width: 2.5rem;
-            height: 2.5rem;
+            width: 2rem;
+            height: 2rem;
             color: rgba(255, 255, 255, 0.1);
-            margin-bottom: 0.5rem;
+            margin-bottom: 0.25rem;
         }
 
         .toast {
@@ -503,6 +568,7 @@ const htmlContent = `<!DOCTYPE html>
             display: flex;
             flex-direction: column;
             gap: 1.5rem;
+            width: 100%;
         }
     </style>
 </head>
@@ -551,9 +617,9 @@ const htmlContent = `<!DOCTYPE html>
                 </div>
             </div>
 
-            <div class="results-grid">
-                <!-- CHÍNH XÁC Column -->
-                <div class="results-column exact">
+            <div class="results-container">
+                <!-- CHÍNH XÁC Section -->
+                <div class="results-section exact" id="exact-section" style="display:none">
                     <div class="column-header">
                         <div class="column-title exact">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
@@ -561,16 +627,11 @@ const htmlContent = `<!DOCTYPE html>
                             <span id="exact-count" class="badge-count" style="display:none">0</span>
                         </div>
                     </div>
-                    <div id="exact-list" class="results-list">
-                        <div class="empty-state">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-                            <div>Chưa có tìm kiếm</div>
-                        </div>
-                    </div>
+                    <div id="exact-list" class="results-list"></div>
                 </div>
 
-                <!-- GỢI Ý Column -->
-                <div class="results-column suggest">
+                <!-- GỢI Ý Section -->
+                <div class="results-section suggest" id="suggest-section" style="display:none">
                     <div class="column-header">
                         <div class="column-title suggest">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
@@ -578,12 +639,13 @@ const htmlContent = `<!DOCTYPE html>
                             <span id="suggest-count" class="badge-count" style="display:none">0</span>
                         </div>
                     </div>
-                    <div id="suggest-list" class="results-list">
-                        <div class="empty-state">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-                            <div>Chưa có tìm kiếm</div>
-                        </div>
-                    </div>
+                    <div id="suggest-list" class="results-list"></div>
+                </div>
+
+                <!-- Status/Empty message area -->
+                <div id="results-message" class="empty-state">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                    <div>Chưa có tìm kiếm</div>
                 </div>
             </div>
         </div>
@@ -642,20 +704,58 @@ const htmlContent = `<!DOCTYPE html>
         let chosenPathStr = '';
         let isPollingStatus = false;
 
+        // Dynamic height adjustment for spotlight window
+        function adjustWindowSize() {
+            const searchView = document.getElementById('search-view');
+            if (searchView && searchView.style.display !== 'none' && document.body.classList.contains('search-mode')) {
+                const container = document.querySelector('.container');
+                if (container) {
+                    let height = container.scrollHeight + 16;
+                    if (height < 90) height = 90;
+                    if (height > 600) height = 600;
+                    if (typeof window.resizeWindow === 'function') {
+                        window.resizeWindow(640, height);
+                    }
+                }
+            }
+        }
+
         // View Toggling
         function showView(viewName) {
             document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
             document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
 
+            const nav = document.querySelector('.main-nav');
+            const header = document.querySelector('header');
+
             if (viewName === 'search') {
+                document.body.classList.add('search-mode');
                 document.getElementById('search-view').style.display = 'flex';
                 document.getElementById('nav-search-btn').classList.add('active');
+                if (nav) nav.style.display = 'none';
+                if (header) header.style.display = 'none';
+                adjustWindowSize();
             } else if (viewName === 'setting') {
+                document.body.classList.remove('search-mode');
                 document.getElementById('setting-view').style.display = 'flex';
                 document.getElementById('nav-setting-btn').classList.add('active');
-                fetchFolders();
+                if (nav) nav.style.display = 'flex';
+                if (header) header.style.display = 'block';
+                // Reset to normal setting window size
+                if (typeof window.resizeWindow === 'function') {
+                    window.resizeWindow(900, 650);
+                }
             }
         }
+
+        // Escape to hide window
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                if (typeof window.hideBar === 'function') {
+                    window.hideBar();
+                }
+            }
+        });
 
         // Folder Picker via Webview Bind or prompt fallback
         async function triggerFolderPicker() {
@@ -763,6 +863,18 @@ const htmlContent = `<!DOCTYPE html>
             }, 250);
         });
 
+        // Focus search input when window is activated or opened
+        window.addEventListener('focus', () => {
+            if (document.body.classList.contains('search-mode')) {
+                setTimeout(() => {
+                    if (searchInput) {
+                        searchInput.focus();
+                        searchInput.select();
+                    }
+                }, 50);
+            }
+        });
+
         function showToast(message) {
             toast.textContent = message;
             toast.classList.add('visible');
@@ -791,12 +903,16 @@ const htmlContent = `<!DOCTYPE html>
             exactCount.style.display = 'none';
             suggestCount.style.display = 'none';
             
-            const emptyHTML = '<div class="empty-state">' +
-                '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>' +
-                '<div>Chưa có tìm kiếm</div>' +
-                '</div>';
-            exactList.innerHTML = emptyHTML;
-            suggestList.innerHTML = emptyHTML;
+            const exactSection = document.getElementById('exact-section');
+            const suggestSection = document.getElementById('suggest-section');
+            const resultsMessage = document.getElementById('results-message');
+
+            exactSection.style.display = 'none';
+            suggestSection.style.display = 'none';
+            resultsMessage.style.display = 'flex';
+            resultsMessage.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></svg><div>Chưa có tìm kiếm</div>';
+
+            adjustWindowSize();
         }
 
         async function fetchResults(query) {
