@@ -28,6 +28,14 @@ type Config struct {
 
 // DefaultConfig creates a Config with specified root paths.
 func DefaultConfig(modelRoot, indexPath string) Config {
+	if modelRoot == "" {
+		modelRoot = model.DefaultModelRoot()
+	} else {
+		modelsPath := filepath.Join(modelRoot, "models")
+		if info, err := os.Stat(modelsPath); err != nil || !info.IsDir() {
+			modelRoot = model.DefaultModelRoot()
+		}
+	}
 	return Config{
 		ModelRoot: modelRoot,
 		IndexPath: indexPath,

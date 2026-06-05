@@ -19,7 +19,12 @@ type OnnxReranker struct {
 func NewOnnxReranker(modelPath, tokenizerPath string) (*OnnxReranker, error) {
 	// Initialize onnxruntime environment if not done yet
 	if !ort.IsInitialized() {
-		ort.SetSharedLibraryPath("/opt/homebrew/lib/libonnxruntime.dylib")
+		lib := findOnnxRuntimeLib()
+		if lib != "" {
+			ort.SetSharedLibraryPath(lib)
+		} else {
+			ort.SetSharedLibraryPath("/opt/homebrew/lib/libonnxruntime.dylib")
+		}
 		err := ort.InitializeEnvironment()
 		if err != nil {
 			return nil, fmt.Errorf("failed to initialize onnxruntime environment: %w", err)
