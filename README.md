@@ -41,22 +41,33 @@ CLI (cmd/sfs)  +  GUI Fyne (cmd/sfs-gui)
   (bge-m3 ship sẵn ONNX trên HuggingFace; reranker export qua
   `optimum-cli export onnx --task text-classification`).
 
-## Build & chạy
+## Cài & chạy (kéo-thả-chạy, không cần cài Python/Qt/ollama)
+
+Binary tự tìm `libonnxruntime` (trong `libs/` cạnh nó) và thư mục `models/` — **không cần `SFS_ROOT`, không cần biến môi trường**.
+
 ```bash
-export CGO_LDFLAGS="-L/opt/homebrew/lib"
-export DYLD_LIBRARY_PATH=/opt/homebrew/lib
-go build -o sfs ./cmd/sfs
-go build -o sfs-gui ./cmd/sfs-gui
+# Lần đầu: tải model tự động từ HuggingFace (một lệnh)
+./sfs setup            # bản đầy đủ (chất lượng cao nhất)
+./sfs setup --light    # bản int8 reranker (570MB thay 2.2GB) — cho máy yếu, recall vẫn 1.00
 
-# Index một thư mục (SFS_ROOT = repo chứa models/)
-SFS_ROOT=. ./sfs index /đường/dẫn/tài-liệu
+# Index một thư mục tài liệu
+./sfs index /đường/dẫn/tài-liệu
 
-# Tìm (in 2 ô CHÍNH XÁC / GỢI Ý)
-SFS_ROOT=. ./sfs search "bien ban nghiem thu"
+# Tìm (in 2 ô CHÍNH XÁC / GỢI Ý) — hỗ trợ không dấu
+./sfs search "bien ban nghiem thu"
 
 # Hoặc GUI một-thanh-tìm
-SFS_ROOT=. ./sfs-gui
+./sfs-gui
 ```
+
+**Build từ nguồn:**
+```bash
+export CGO_LDFLAGS="-L/opt/homebrew/lib"     # nơi có libtokenizers.a (static-link)
+go build -o sfs ./cmd/sfs
+go build -o sfs-gui ./cmd/sfs-gui
+```
+
+**Đóng gói phân phối:** đặt `libonnxruntime.dylib` vào `libs/` cạnh binary, model vào `models/` (hoặc để `sfs setup` tải). Người dùng chỉ cần tải thư mục về và chạy.
 
 ## Van tốc độ (`RerankK`)
 Số candidate đưa vào cross-encoder = đánh đổi giữa tốc độ và recall. Mặc định **5** (dưới 1s trên CPU M-series). Máy mạnh tăng (12+) cho recall cao hơn; máy yếu giảm. Hai lớp BM25+vector đã lọc trước nên top-5 gần như luôn chứa đáp án đúng.
