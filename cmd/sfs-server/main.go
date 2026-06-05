@@ -4,15 +4,41 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"time"
 
 	"sfs/internal/engine"
+	"sfs/internal/store"
+)
+
+// Global State
+var (
+	engineMutex  sync.RWMutex
+	globalEngine *engine.Engine
+	globalConfig engine.Config
+
+	setupMutex      sync.Mutex
+	isDownloading   bool
+	downloadPercent int
+	downloadStatus  string
+	downloadErr     error
+
+	indexedFoldersMutex sync.Mutex
+	indexedFolders      []string
+
+	indexingMutex sync.Mutex
+	isIndexing    bool
+	indexDir      string
+	indexMode     string
+	initialCount  int
+	currentCount  int
 )
 
 const htmlContent = `<!DOCTYPE html>
@@ -54,7 +80,7 @@ const htmlContent = `<!DOCTYPE html>
             display: flex;
             flex-direction: column;
             align-items: center;
-            padding: 2rem 1rem;
+            padding: 1.5rem 1rem;
             overflow-x: hidden;
         }
 
@@ -77,27 +103,129 @@ const htmlContent = `<!DOCTYPE html>
             max-width: 1200px;
             display: flex;
             flex-direction: column;
-            gap: 2rem;
+            gap: 1.5rem;
+        }
+
+        /* Navigation styling */
+        .main-nav {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 9999px;
+            padding: 0.5rem 1.5rem;
+            backdrop-filter: blur(12px);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .nav-brand {
+            font-weight: 700;
+            font-size: 0.95rem;
+            letter-spacing: 0.1em;
+            background: linear-gradient(135deg, #a5b4fc 0%, #6366f1 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .nav-link {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-family: var(--font-main);
+            font-size: 0.9rem;
+            font-weight: 600;
+            padding: 0.5rem 1.25rem;
+            border-radius: 9999px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .nav-link:hover {
+            color: var(--text-primary);
+            background: rgba(255, 255, 255, 0.04);
+        }
+
+        .nav-link.active {
+            color: white;
+            background: var(--primary);
+            box-shadow: 0 4px 12px var(--primary-glow);
+        }
+
+        /* Setup banner styling */
+        .setup-banner {
+            background: rgba(239, 68, 68, 0.07);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            border-radius: 12px;
+            padding: 0.75rem 1.25rem;
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+        }
+
+        .setup-banner.visible {
+            display: flex;
+        }
+
+        .setup-text {
+            color: #fca5a5;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .setup-btn {
+            background: #ef4444;
+            color: white;
+            border: none;
+            padding: 0.4rem 1rem;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .setup-btn:hover {
+            background: #dc2626;
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.3);
+        }
+
+        .setup-btn:disabled {
+            background: var(--text-secondary);
+            cursor: not-allowed;
+            box-shadow: none;
         }
 
         header {
             text-align: center;
-            margin-bottom: 1rem;
+            margin: 0.5rem 0;
         }
 
         h1 {
-            font-size: 2.5rem;
+            font-size: 2.2rem;
             font-weight: 700;
             background: linear-gradient(135deg, #fff 0%, #a5b4fc 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             letter-spacing: -0.025em;
-            margin-bottom: 0.5rem;
+            margin-bottom: 0.25rem;
         }
 
         header p {
             color: var(--text-secondary);
-            font-size: 0.95rem;
+            font-size: 0.9rem;
         }
 
         .search-container {
@@ -115,8 +243,8 @@ const htmlContent = `<!DOCTYPE html>
 
         .search-input {
             width: 100%;
-            padding: 1.1rem 1.5rem 1.1rem 3.5rem;
-            font-size: 1.1rem;
+            padding: 1rem 1.5rem 1rem 3.5rem;
+            font-size: 1.05rem;
             font-family: var(--font-main);
             background: var(--panel-bg);
             border: 1px solid var(--border-color);
@@ -172,8 +300,8 @@ const htmlContent = `<!DOCTYPE html>
         .results-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 2rem;
-            margin-top: 1rem;
+            gap: 1.5rem;
+            margin-top: 0.5rem;
         }
 
         @media (max-width: 868px) {
@@ -204,7 +332,7 @@ const htmlContent = `<!DOCTYPE html>
         }
 
         .column-title {
-            font-size: 1.1rem;
+            font-size: 1.05rem;
             font-weight: 700;
             letter-spacing: 0.05em;
             display: flex;
@@ -373,59 +501,164 @@ const htmlContent = `<!DOCTYPE html>
             opacity: 1;
             transform: translateY(0);
         }
+
+        .view {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .indexing-indicator {
+            background: rgba(99, 102, 241, 0.08);
+            border: 1px solid rgba(99, 102, 241, 0.2);
+            border-radius: 12px;
+            padding: 0.6rem 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            width: 100%;
+            margin-bottom: 1rem;
+            animation: pulse 2s infinite ease-in-out;
+        }
+
+        .indexing-spinner {
+            width: 1rem;
+            height: 1rem;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            border-top: 2px solid var(--primary);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 0.7; }
+            50% { opacity: 1; }
+            100% { opacity: 0.7; }
+        }
     </style>
 </head>
 <body>
     <div class="ambient-bg"></div>
     <div class="container">
-        <header>
-            <h1>SFS Search</h1>
-            <p>Wrapping Vector & BM25 Search Engine with Reranker</p>
-        </header>
+        <!-- Navigation -->
+        <nav class="main-nav">
+            <div class="nav-brand">SFS BETTER RECOLL</div>
+            <div class="nav-links">
+                <button id="nav-search-btn" class="nav-link active" onclick="showView('search')">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                    Tìm Kiếm
+                </button>
+                <button id="nav-setting-btn" class="nav-link" onclick="showView('setting')">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                    Thiết Lập
+                </button>
+            </div>
+        </nav>
 
-        <div class="search-container">
-            <div class="search-input-wrapper">
-                <input type="text" id="search-input" class="search-input" placeholder="Nhập từ khóa tìm kiếm..." autocomplete="off" autofocus>
-                <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="11" cy="11" r="8"></circle>
-                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                </svg>
-                <div id="search-loader" class="loader"></div>
+        <!-- Global Indexing Indicator -->
+        <div id="indexing-indicator" class="indexing-indicator" style="display:none">
+            <div class="indexing-spinner"></div>
+            <span id="indexing-status-text" style="font-size: 0.9rem; color: #a5b4fc;">Đang lập chỉ mục...</span>
+        </div>
+
+        <!-- VIEW 1: SEARCH VIEW -->
+        <div class="view" id="search-view">
+            <!-- Setup Warning Banner -->
+            <div id="setup-banner" class="setup-banner">
+                <div class="setup-text">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                    <span id="setup-banner-msg">Chưa có model AI. Lập chỉ mục & tìm kiếm sẽ không hoạt động.</span>
+                </div>
+                <button id="setup-btn" class="setup-btn" onclick="startSetup()">Tải Ngay</button>
+            </div>
+
+            <header>
+                <h1>SFS Search</h1>
+                <p>Wrapping Vector & BM25 Search Engine with Reranker</p>
+            </header>
+
+            <div class="search-container">
+                <div class="search-input-wrapper">
+                    <input type="text" id="search-input" class="search-input" placeholder="Nhập từ khóa tìm kiếm..." autocomplete="off" autofocus>
+                    <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                    <div id="search-loader" class="loader"></div>
+                </div>
+            </div>
+
+            <div class="results-grid">
+                <!-- CHÍNH XÁC Column -->
+                <div class="results-column exact">
+                    <div class="column-header">
+                        <div class="column-title exact">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                            CHÍNH XÁC
+                            <span id="exact-count" class="badge-count" style="display:none">0</span>
+                        </div>
+                    </div>
+                    <div id="exact-list" class="results-list">
+                        <div class="empty-state">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                            <div>Chưa có tìm kiếm</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- GỢI Ý Column -->
+                <div class="results-column suggest">
+                    <div class="column-header">
+                        <div class="column-title suggest">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                            GỢI Ý
+                            <span id="suggest-count" class="badge-count" style="display:none">0</span>
+                        </div>
+                    </div>
+                    <div id="suggest-list" class="results-list">
+                        <div class="empty-state">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                            <div>Chưa có tìm kiếm</div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <div class="results-grid">
-            <!-- CHÍNH XÁC Column -->
-            <div class="results-column exact">
+        <!-- VIEW 2: SETTING VIEW -->
+        <div class="view" id="setting-view" style="display:none">
+            <!-- Index Group -->
+            <div class="results-column" style="min-height: auto;">
                 <div class="column-header">
-                    <div class="column-title exact">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                        CHÍNH XÁC
-                        <span id="exact-count" class="badge-count" style="display:none">0</span>
+                    <div class="column-title" style="color: var(--primary)">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l-.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                        LẬP CHỈ MỤC THƯ MỤC
                     </div>
                 </div>
-                <div id="exact-list" class="results-list">
-                    <div class="empty-state">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-                        <div>Chưa có tìm kiếm</div>
+                
+                <div style="display: flex; flex-direction: column; gap: 1rem; margin-top: 1rem;">
+                    <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+                        <button class="setup-btn" style="background: var(--primary);" onclick="triggerFolderPicker()">Chọn thư mục...</button>
+                        <span id="chosen-path" style="font-family: monospace; color: var(--text-secondary); word-break: break-all; flex-grow: 1; min-width: 200px;">Chưa chọn thư mục nào</span>
                     </div>
+                    
+                    <button id="index-btn" class="setup-btn" style="background: var(--exact-color); width: fit-content; display: none;" onclick="startIndexing()">Lập chỉ mục thư mục này</button>
+                    
+                    <div id="index-status" style="font-size: 0.9rem; color: var(--text-secondary); display: none;"></div>
                 </div>
             </div>
 
-            <!-- GỢI Ý Column -->
-            <div class="results-column suggest">
+            <!-- Folders List Group -->
+            <div class="results-column" style="min-height: auto;">
                 <div class="column-header">
-                    <div class="column-title suggest">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-                        GỢI Ý
-                        <span id="suggest-count" class="badge-count" style="display:none">0</span>
+                    <div class="column-title" style="color: var(--suggest-color)">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                        THƯ MỤC ĐÃ LẬP CHỈ MỤC
                     </div>
                 </div>
-                <div id="suggest-list" class="results-list">
-                    <div class="empty-state">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-                        <div>Chưa có tìm kiếm</div>
-                    </div>
+                
+                <div id="folders-list" style="margin-top: 1rem; display: flex; flex-direction: column; gap: 0.75rem;">
+                    <div style="color: var(--text-secondary); font-size: 0.9rem; font-style: italic;">Chưa có thư mục nào được lập chỉ mục trong phiên này.</div>
                 </div>
             </div>
         </div>
@@ -443,7 +676,124 @@ const htmlContent = `<!DOCTYPE html>
         const toast = document.getElementById('toast');
 
         let debounceTimer;
+        let chosenPathStr = '';
+        let isPollingStatus = false;
 
+        // View Toggling
+        function showView(viewName) {
+            document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
+            document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+
+            if (viewName === 'search') {
+                document.getElementById('search-view').style.display = 'flex';
+                document.getElementById('nav-search-btn').classList.add('active');
+            } else if (viewName === 'setting') {
+                document.getElementById('setting-view').style.display = 'flex';
+                document.getElementById('nav-setting-btn').classList.add('active');
+                fetchFolders();
+            }
+        }
+
+        // Folder Picker via Webview Bind or prompt fallback
+        async function triggerFolderPicker() {
+            if (typeof window.pickFolder === 'function') {
+                try {
+                    const path = await window.pickFolder();
+                    if (path) {
+                        chosenPathStr = path;
+                        document.getElementById('chosen-path').textContent = path;
+                        document.getElementById('index-btn').style.display = 'inline-block';
+                    }
+                } catch (err) {
+                    console.error('Lỗi chọn thư mục:', err);
+                }
+            } else {
+                const path = prompt('Nhập đường dẫn thư mục:');
+                if (path) {
+                    chosenPathStr = path;
+                    document.getElementById('chosen-path').textContent = path;
+                    document.getElementById('index-btn').style.display = 'inline-block';
+                }
+            }
+        }
+
+        // Folder indexing request
+        async function startIndexing() {
+            if (!chosenPathStr) return;
+            const btn = document.getElementById('index-btn');
+            const statusDiv = document.getElementById('index-status');
+            btn.disabled = true;
+            statusDiv.style.display = 'block';
+            statusDiv.textContent = 'Đang tiến hành lập chỉ mục...';
+            statusDiv.style.color = 'var(--text-secondary)';
+
+            try {
+                const response = await fetch('/api/index', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ dir: chosenPathStr, mode: 'background' })
+                });
+
+                if (!response.ok) {
+                    const errMsg = await response.text();
+                    throw new Error(errMsg || 'Lỗi không xác định');
+                }
+
+                const data = await response.json();
+                if (data && data.busy) {
+                    statusDiv.textContent = 'Máy chủ đang bận lập chỉ mục một thư mục khác!';
+                    statusDiv.style.color = '#ef4444';
+                    btn.disabled = false;
+                    return;
+                }
+
+                statusDiv.textContent = 'Đã bắt đầu lập chỉ mục trong nền!';
+                statusDiv.style.color = 'var(--exact-color)';
+                fetchFolders();
+            } catch (err) {
+                statusDiv.textContent = 'Lập chỉ mục thất bại: ' + err.message;
+                statusDiv.style.color = '#ef4444';
+                btn.disabled = false;
+            }
+        }
+
+        // Fetch indexed folders
+        async function fetchFolders() {
+            try {
+                const response = await fetch('/api/folders');
+                if (response.ok) {
+                    const folders = await response.json();
+                    renderFolders(folders);
+                }
+            } catch (err) {
+                console.error('Lỗi lấy danh sách thư mục:', err);
+            }
+        }
+
+        function renderFolders(folders) {
+            const container = document.getElementById('folders-list');
+            if (!folders || folders.length === 0) {
+                container.innerHTML = '<div style="color: var(--text-secondary); font-size: 0.9rem; font-style: italic;">Chưa có thư mục nào được lập chỉ mục trong phiên này.</div>';
+                return;
+            }
+
+            container.innerHTML = folders.map(f => {
+                const escaped = f
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .replace(/"/g, "&quot;")
+                    .replace(/'/g, "&#039;");
+                return '<div class="result-card" style="padding: 0.75rem 1rem; flex-direction: row; justify-content: space-between; align-items: center;">' +
+                       '  <span style="font-family: monospace; font-size: 0.85rem; color: var(--text-primary); word-break: break-all;">' + escaped + '</span>' +
+                       '  <span class="score-badge" style="background: var(--exact-glow); color: var(--exact-color); border-color: rgba(16, 185, 129, 0.2);">Indexed</span>' +
+                       '</div>';
+            }).join('');
+        }
+
+        // Search Input Handling
         searchInput.addEventListener('input', () => {
             clearTimeout(debounceTimer);
             const query = searchInput.value.trim();
@@ -462,7 +812,7 @@ const htmlContent = `<!DOCTYPE html>
             toast.classList.add('visible');
             setTimeout(() => {
                 toast.classList.remove('visible');
-            }, 2000);
+            }, 2500);
         }
 
         async function copyToClipboard(text) {
@@ -470,7 +820,6 @@ const htmlContent = `<!DOCTYPE html>
                 await navigator.clipboard.writeText(text);
                 showToast('Đã sao chép đường dẫn!');
             } catch (err) {
-                // fallback
                 const el = document.createElement('textarea');
                 el.value = text;
                 document.body.appendChild(el);
@@ -498,22 +847,27 @@ const htmlContent = `<!DOCTYPE html>
             try {
                 const response = await fetch('/api/search?q=' + encodeURIComponent(query));
                 if (!response.ok) {
+                    const data = await response.json();
+                    if (data && data.error) {
+                        throw new Error(data.error);
+                    }
                     throw new Error('Mạng hoặc máy chủ gặp lỗi');
                 }
                 const data = await response.json();
                 renderResults(data);
             } catch (err) {
                 console.error(err);
-                showErrorState();
+                showErrorState(err.message);
             } finally {
                 loader.classList.remove('visible');
             }
         }
 
-        function showErrorState() {
+        function showErrorState(msg) {
+            const displayMsg = msg || 'Lỗi kết nối máy chủ';
             const errorHTML = '<div class="empty-state" style="color: #ef4444;">' +
                 '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>' +
-                '<div>Lỗi kết nối máy chủ</div>' +
+                '<div>' + displayMsg + '</div>' +
                 '</div>';
             exactList.innerHTML = errorHTML;
             suggestList.innerHTML = errorHTML;
@@ -578,11 +932,153 @@ const htmlContent = `<!DOCTYPE html>
                    '  <div class="result-text">' + escapedText + '</div>' +
                    '</div>';
         }
+
+        // Setup Banner / Status Polling Logic
+        let wasDownloading = false;
+        let wasMissing = true;
+
+        async function checkStatus() {
+            try {
+                const response = await fetch('/api/status');
+                if (!response.ok) return;
+                const status = await response.json();
+
+                const banner = document.getElementById('setup-banner');
+                const bannerMsg = document.getElementById('setup-banner-msg');
+                const setupBtn = document.getElementById('setup-btn');
+
+                if (status.missing) {
+                    banner.classList.add('visible');
+                    searchInput.disabled = true;
+                    searchInput.placeholder = "Vui lòng tải model AI trước...";
+
+                    if (status.downloading) {
+                        bannerMsg.textContent = 'Đang tải model: ' + status.status + ' (' + status.percent + '%)';
+                        setupBtn.style.display = 'none';
+                        wasDownloading = true;
+                    } else if (status.error) {
+                        bannerMsg.textContent = 'Lỗi tải: ' + status.error;
+                        setupBtn.textContent = 'Thử Lại';
+                        setupBtn.style.display = 'inline-block';
+                        setupBtn.disabled = false;
+                        wasDownloading = false;
+                    } else {
+                        bannerMsg.textContent = 'Chưa có model AI. Lập chỉ mục & tìm kiếm sẽ không hoạt động.';
+                        setupBtn.textContent = 'Tải Ngay';
+                        setupBtn.style.display = 'inline-block';
+                        setupBtn.disabled = false;
+                        wasDownloading = false;
+                    }
+                    wasMissing = true;
+                } else {
+                    banner.classList.remove('visible');
+                    if (!status.indexing) {
+                        searchInput.disabled = false;
+                        searchInput.placeholder = "Nhập từ khóa tìm kiếm...";
+                    } else {
+                        searchInput.disabled = true;
+                        searchInput.placeholder = "Đang lập chỉ mục thư mục...";
+                    }
+
+                    if (wasMissing) {
+                        wasMissing = false;
+                        if (wasDownloading) {
+                            showToast('Đã tải và khởi tạo model AI thành công!');
+                            resetUI();
+                        }
+                    }
+                    wasDownloading = false;
+                }
+
+                // Handle indexing status
+                const indicator = document.getElementById('indexing-indicator');
+                const indicatorText = document.getElementById('indexing-status-text');
+                const indexStatusDiv = document.getElementById('index-status');
+                const indexBtn = document.getElementById('index-btn');
+
+                if (status.indexing) {
+                    indicator.style.display = 'flex';
+                    const phaseText = status.phase === 'fast' ? 'nhanh' : 'nền';
+                    const msg = 'Đang lập chỉ mục (' + phaseText + ') "' + status.currentDir + '"... (' + status.filesIndexed + ' file)';
+                    indicatorText.textContent = msg;
+
+                    if (indexStatusDiv) {
+                        indexStatusDiv.style.display = 'block';
+                        indexStatusDiv.textContent = msg;
+                        indexStatusDiv.style.color = 'var(--text-secondary)';
+                    }
+                    if (indexBtn) {
+                        indexBtn.disabled = true;
+                    }
+                } else {
+                    indicator.style.display = 'none';
+                    if (indexStatusDiv && indexStatusDiv.style.display === 'block' && indexStatusDiv.textContent.includes('Đang lập chỉ mục')) {
+                        indexStatusDiv.textContent = 'Đã hoàn thành lập chỉ mục!';
+                        indexStatusDiv.style.color = 'var(--exact-color)';
+                        setTimeout(() => {
+                            if (indexStatusDiv.textContent === 'Đã hoàn thành lập chỉ mục!') {
+                                indexStatusDiv.style.display = 'none';
+                            }
+                        }, 5000);
+                    }
+                    if (indexBtn && chosenPathStr) {
+                        indexBtn.disabled = false;
+                    }
+                }
+            } catch (err) {
+                console.error('Lỗi kiểm tra trạng thái:', err);
+            }
+        }
+
+        async function startSetup() {
+            const setupBtn = document.getElementById('setup-btn');
+            setupBtn.disabled = true;
+            setupBtn.textContent = 'Đang chuẩn bị...';
+
+            try {
+                const response = await fetch('/api/setup', { method: 'POST' });
+                if (response.ok) {
+                    checkStatus();
+                } else {
+                    const txt = await response.text();
+                    alert('Lỗi bắt đầu setup: ' + txt);
+                    setupBtn.disabled = false;
+                    setupBtn.textContent = 'Tải Ngay';
+                }
+            } catch (err) {
+                alert('Lỗi kết nối setup: ' + err.message);
+                setupBtn.disabled = false;
+                setupBtn.textContent = 'Tải Ngay';
+            }
+        }
+
+        // Initialize
+        checkStatus();
+        fetchFolders();
+        setInterval(checkStatus, 1000);
     </script>
 </body>
 </html>`
 
-func handleSearch(eng *engine.Engine) http.HandlerFunc {
+func handleSearch(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	engineMutex.RLock()
+	eng := globalEngine
+	engineMutex.RUnlock()
+
+	if eng == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "Mô hình AI chưa được tải. Hãy tải mô hình trước.",
+		})
+		return
+	}
+
 	type SearchResultItem struct {
 		FilePath string  `json:"filePath"`
 		Text     string  `json:"text"`
@@ -594,93 +1090,160 @@ func handleSearch(eng *engine.Engine) http.HandlerFunc {
 		Suggest []SearchResultItem `json:"suggest"`
 	}
 
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-
-		q := r.URL.Query().Get("q")
-		if q == "" {
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(SearchResponse{
-				Exact:   []SearchResultItem{},
-				Suggest: []SearchResultItem{},
-			})
-			return
-		}
-
-		results, err := eng.SearchRanked(q, 10)
-		if err != nil {
-			log.Printf("Search error: %v", err)
-			http.Error(w, fmt.Sprintf("Search failed: %v", err), http.StatusInternalServerError)
-			return
-		}
-
-		exact := make([]SearchResultItem, 0, len(results.Exact))
-		for _, item := range results.Exact {
-			exact = append(exact, SearchResultItem{
-				FilePath: item.FilePath,
-				Text:     item.Text,
-				Score:    item.Score,
-			})
-		}
-
-		suggest := make([]SearchResultItem, 0, len(results.Suggest))
-		for _, item := range results.Suggest {
-			suggest = append(suggest, SearchResultItem{
-				FilePath: item.FilePath,
-				Text:     item.Text,
-				Score:    item.Score,
-			})
-		}
-
+	q := r.URL.Query().Get("q")
+	if q == "" {
 		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(SearchResponse{
-			Exact:   exact,
-			Suggest: suggest,
-		}); err != nil {
-			log.Printf("JSON encoding error: %v", err)
-		}
+		json.NewEncoder(w).Encode(SearchResponse{
+			Exact:   []SearchResultItem{},
+			Suggest: []SearchResultItem{},
+		})
+		return
+	}
+
+	results, err := eng.SearchRanked(q, 10)
+	if err != nil {
+		log.Printf("Search error: %v", err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": fmt.Sprintf("Tìm kiếm thất bại: %v", err),
+		})
+		return
+	}
+
+	exact := make([]SearchResultItem, 0, len(results.Exact))
+	for _, item := range results.Exact {
+		exact = append(exact, SearchResultItem{
+			FilePath: item.FilePath,
+			Text:     item.Text,
+			Score:    item.Score,
+		})
+	}
+
+	suggest := make([]SearchResultItem, 0, len(results.Suggest))
+	for _, item := range results.Suggest {
+		suggest = append(suggest, SearchResultItem{
+			FilePath: item.FilePath,
+			Text:     item.Text,
+			Score:    item.Score,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(SearchResponse{
+		Exact:   exact,
+		Suggest: suggest,
+	}); err != nil {
+		log.Printf("JSON encoding error: %v", err)
 	}
 }
 
-func handleIndex(eng *engine.Engine) http.HandlerFunc {
+func getStoreCount(indexPath string) int {
+	gobPath := filepath.Join(indexPath, "chunks.gob")
+	if _, err := os.Stat(gobPath); os.IsNotExist(err) {
+		return 0
+	}
+	st, err := store.NewFileStore(indexPath)
+	if err != nil {
+		return 0
+	}
+	defer st.Close()
+	return st.Count()
+}
+
+func handleIndex(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	engineMutex.RLock()
+	eng := globalEngine
+	cfg := globalConfig
+	engineMutex.RUnlock()
+
+	if eng == nil {
+		http.Error(w, "Mô hình AI chưa được tải. Hãy tải mô hình trước.", http.StatusServiceUnavailable)
+		return
+	}
+
 	type IndexRequest struct {
-		Dir string `json:"dir"`
+		Dir  string `json:"dir"`
+		Mode string `json:"mode"`
 	}
 
-	type IndexResponse struct {
-		Indexed bool `json:"indexed"`
+	var req IndexRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		return
 	}
 
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
+	if req.Dir == "" {
+		http.Error(w, "Directory path 'dir' is required", http.StatusBadRequest)
+		return
+	}
 
-		var req IndexRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "Invalid JSON body", http.StatusBadRequest)
-			return
-		}
-
-		if req.Dir == "" {
-			http.Error(w, "Directory path 'dir' is required", http.StatusBadRequest)
-			return
-		}
-
-		log.Printf("Indexing directory: %s", req.Dir)
-		if err := eng.Index(req.Dir); err != nil {
-			log.Printf("Indexing error: %v", err)
-			http.Error(w, fmt.Sprintf("Indexing failed: %v", err), http.StatusInternalServerError)
-			return
-		}
-
+	indexingMutex.Lock()
+	if isIndexing {
+		indexingMutex.Unlock()
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(IndexResponse{Indexed: true})
+		json.NewEncoder(w).Encode(map[string]bool{"busy": true})
+		return
 	}
+	isIndexing = true
+	indexDir = req.Dir
+	indexMode = req.Mode
+	if indexMode == "" {
+		indexMode = "background"
+	}
+	indexingMutex.Unlock()
+
+	go func() {
+		var opts engine.IndexOptions
+		if indexMode == "fast" {
+			opts = engine.FastIndexOptions()
+		} else {
+			opts = engine.BackgroundIndexOptions()
+		}
+
+		startCount := getStoreCount(cfg.IndexPath)
+		indexingMutex.Lock()
+		initialCount = startCount
+		currentCount = startCount
+		indexingMutex.Unlock()
+
+		log.Printf("Starting background index of %s in %s mode", req.Dir, indexMode)
+		err := eng.IndexThrottled(req.Dir, opts)
+
+		endCount := getStoreCount(cfg.IndexPath)
+
+		indexingMutex.Lock()
+		isIndexing = false
+		currentCount = endCount
+		if err != nil {
+			log.Printf("Background indexing error: %v", err)
+		} else {
+			log.Printf("Background indexing finished successfully. Chunks: %d -> %d", startCount, endCount)
+
+			// Add to memory list of folders
+			indexedFoldersMutex.Lock()
+			exists := false
+			for _, f := range indexedFolders {
+				if f == req.Dir {
+					exists = true
+					break
+				}
+			}
+			if !exists {
+				indexedFolders = append(indexedFolders, req.Dir)
+			}
+			indexedFoldersMutex.Unlock()
+		}
+		indexingMutex.Unlock()
+	}()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"started": true})
 }
 
 func handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -697,6 +1260,129 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(HealthResponse{Ok: true})
 }
 
+func handleFolders(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	indexedFoldersMutex.Lock()
+	folders := indexedFolders
+	if folders == nil {
+		folders = []string{}
+	}
+	indexedFoldersMutex.Unlock()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(folders)
+}
+
+type StatusResponse struct {
+	Missing      bool   `json:"missing"`
+	Downloading  bool   `json:"downloading"`
+	Percent      int    `json:"percent"`
+	Status       string `json:"status"`
+	Error        string `json:"error"`
+	Indexing     bool   `json:"indexing"`
+	CurrentDir   string `json:"currentDir"`
+	FilesIndexed int    `json:"filesIndexed"`
+	Phase        string `json:"phase"`
+}
+
+func handleStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	engineMutex.RLock()
+	hasEngine := globalEngine != nil
+	cfg := globalConfig
+	engineMutex.RUnlock()
+
+	setupMutex.Lock()
+	resp := StatusResponse{
+		Missing:     !hasEngine,
+		Downloading: isDownloading,
+		Percent:     downloadPercent,
+		Status:      downloadStatus,
+	}
+	if downloadErr != nil {
+		resp.Error = downloadErr.Error()
+	}
+	setupMutex.Unlock()
+
+	indexingMutex.Lock()
+	resp.Indexing = isIndexing
+	resp.CurrentDir = indexDir
+	resp.Phase = indexMode
+	initC := initialCount
+	indexingMutex.Unlock()
+
+	if resp.Indexing {
+		currC := getStoreCount(cfg.IndexPath)
+		diff := currC - initC
+		if diff < 0 {
+			diff = 0
+		}
+		resp.FilesIndexed = diff
+	} else {
+		resp.Phase = "idle"
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+func handleSetup(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	setupMutex.Lock()
+	if isDownloading {
+		setupMutex.Unlock()
+		http.Error(w, "Already downloading", http.StatusConflict)
+		return
+	}
+	isDownloading = true
+	downloadPercent = 0
+	downloadStatus = "Bắt đầu tải..."
+	downloadErr = nil
+	setupMutex.Unlock()
+
+	go func() {
+		engineMutex.RLock()
+		cfg := globalConfig
+		engineMutex.RUnlock()
+
+		err := downloadAndSetupModels(cfg)
+		setupMutex.Lock()
+		isDownloading = false
+		if err != nil {
+			downloadErr = err
+			downloadStatus = "Lỗi: " + err.Error()
+		} else {
+			downloadStatus = "Khởi tạo công cụ tìm kiếm..."
+			eng, initErr := engine.New(cfg)
+			if initErr != nil {
+				downloadErr = initErr
+				downloadStatus = "Lỗi khởi tạo: " + initErr.Error()
+			} else {
+				engineMutex.Lock()
+				globalEngine = eng
+				engineMutex.Unlock()
+				downloadStatus = "Đã hoàn thành!"
+			}
+		}
+		setupMutex.Unlock()
+	}()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"started": true})
+}
+
 func handleHome(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
@@ -710,8 +1396,219 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(htmlContent))
 }
 
+func checkModelExists(cfg engine.Config) bool {
+	modelPath := filepath.Join(cfg.ModelRoot, "models", "onnx", "bge-m3", "model.onnx")
+	_, err := os.Stat(modelPath)
+	return err == nil
+}
+
+func getRemoteSize(url string) int64 {
+	req, err := http.NewRequest("HEAD", url, nil)
+	if err != nil {
+		return 0
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return 0
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusOK {
+		return resp.ContentLength
+	}
+	return 0
+}
+
+func downloadFile(url string, destPath string, onWrite func(n int)) error {
+	resp, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("HTTP status error: %s", resp.Status)
+	}
+
+	out, err := os.Create(destPath)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	buf := make([]byte, 32*1024)
+	for {
+		n, readErr := resp.Body.Read(buf)
+		if n > 0 {
+			_, writeErr := out.Write(buf[:n])
+			if writeErr != nil {
+				return writeErr
+			}
+			onWrite(n)
+		}
+		if readErr == io.EOF {
+			break
+		}
+		if readErr != nil {
+			return readErr
+		}
+	}
+	return nil
+}
+
+func downloadAndSetupModels(cfg engine.Config) error {
+	root := cfg.ModelRoot
+	bgeM3Dir := filepath.Join(root, "models", "onnx", "bge-m3")
+	bgeRerankerDir := filepath.Join(root, "models", "onnx", "bge-reranker")
+
+	if err := os.MkdirAll(bgeM3Dir, 0755); err != nil {
+		return fmt.Errorf("failed to create directory %s: %w", bgeM3Dir, err)
+	}
+	if err := os.MkdirAll(bgeRerankerDir, 0755); err != nil {
+		return fmt.Errorf("failed to create directory %s: %w", bgeRerankerDir, err)
+	}
+
+	bgeM3Files := []struct {
+		srcPath  string
+		destName string
+	}{
+		{srcPath: "onnx/model.onnx", destName: "model.onnx"},
+		{srcPath: "onnx/model.onnx_data", destName: "model.onnx_data"},
+		{srcPath: "tokenizer.json", destName: "tokenizer.json"},
+		{srcPath: "tokenizer_config.json", destName: "tokenizer_config.json"},
+		{srcPath: "special_tokens_map.json", destName: "special_tokens_map.json"},
+		{srcPath: "config.json", destName: "config.json"},
+		{srcPath: "sentencepiece.bpe.model", destName: "sentencepiece.bpe.model"},
+	}
+	bgeM3BaseURL := "https://huggingface.co/BAAI/bge-m3/resolve/main/"
+
+	rerankerFiles := []struct {
+		srcPath  string
+		destName string
+	}{
+		{srcPath: "onnx/model.onnx", destName: "model.onnx"},
+		{srcPath: "onnx/model.onnx_data", destName: "model.onnx_data"},
+		{srcPath: "tokenizer.json", destName: "tokenizer.json"},
+		{srcPath: "tokenizer_config.json", destName: "tokenizer_config.json"},
+		{srcPath: "special_tokens_map.json", destName: "special_tokens_map.json"},
+		{srcPath: "config.json", destName: "config.json"},
+	}
+	bgeRerankerBaseURL := "https://huggingface.co/onnx-community/bge-reranker-v2-m3-ONNX/resolve/main/"
+
+	type downloadItem struct {
+		url      string
+		destPath string
+		destName string
+		size     int64
+	}
+
+	var items []downloadItem
+	for _, f := range bgeM3Files {
+		items = append(items, downloadItem{
+			url:      fmt.Sprintf("%s%s?download=true", bgeM3BaseURL, f.srcPath),
+			destPath: filepath.Join(bgeM3Dir, f.destName),
+			destName: "BGE-M3 " + f.destName,
+		})
+	}
+	for _, f := range rerankerFiles {
+		items = append(items, downloadItem{
+			url:      fmt.Sprintf("%s%s?download=true", bgeRerankerBaseURL, f.srcPath),
+			destPath: filepath.Join(bgeRerankerDir, f.destName),
+			destName: "Reranker " + f.destName,
+		})
+	}
+
+	var totalExpectedSize int64 = 0
+	var alreadyDownloadedSize int64 = 0
+
+	for i, item := range items {
+		setupMutex.Lock()
+		downloadStatus = "Đang kiểm tra: " + item.destName
+		setupMutex.Unlock()
+
+		size := getRemoteSize(item.url)
+		items[i].size = size
+
+		if size > 0 {
+			if info, err := os.Stat(item.destPath); err == nil && info.Size() == size {
+				alreadyDownloadedSize += size
+			} else {
+				totalExpectedSize += size
+			}
+		} else {
+			// fallback
+			totalExpectedSize += 100 * 1024 * 1024
+		}
+	}
+
+	var currentDownloaded int64 = 0
+	for _, item := range items {
+		setupMutex.Lock()
+		downloadStatus = "Đang tải: " + item.destName
+		setupMutex.Unlock()
+
+		if item.size > 0 {
+			if info, err := os.Stat(item.destPath); err == nil && info.Size() == item.size {
+				continue
+			}
+		}
+
+		err := downloadFile(item.url, item.destPath, func(n int) {
+			currentDownloaded += int64(n)
+			setupMutex.Lock()
+			total := totalExpectedSize + alreadyDownloadedSize
+			if total > 0 {
+				downloadPercent = int((alreadyDownloadedSize + currentDownloaded) * 100 / total)
+			}
+			setupMutex.Unlock()
+		})
+		if err != nil {
+			if filepath.Base(item.destPath) == "special_tokens_map.json" {
+				log.Printf("Skipping optional file %s due to error: %v", item.destName, err)
+				continue
+			}
+			return fmt.Errorf("failed to download %s: %w", item.destName, err)
+		}
+	}
+
+	return nil
+}
+
+// StartServer starts the HTTP server on localhost:port and returns the server instance
+func StartServer(port string, cfg engine.Config) (*http.Server, error) {
+	globalConfig = cfg
+
+	// Setup Engine if model files already exist
+	if checkModelExists(cfg) {
+		log.Printf("Models found on disk. Initializing search engine...")
+		eng, err := engine.New(cfg)
+		if err != nil {
+			log.Printf("Failed to initialize engine on startup: %v", err)
+		} else {
+			globalEngine = eng
+			log.Printf("Engine successfully initialized.")
+		}
+	} else {
+		log.Printf("WARNING: AI Models missing from %s. Engine will remain uninitialized until setup is run.", cfg.ModelRoot)
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", handleHome)
+	mux.HandleFunc("/api/search", handleSearch)
+	mux.HandleFunc("/api/index", handleIndex)
+	mux.HandleFunc("/api/health", handleHealth)
+	mux.HandleFunc("/api/setup", handleSetup)
+	mux.HandleFunc("/api/status", handleStatus)
+	mux.HandleFunc("/api/folders", handleFolders)
+
+	server := &http.Server{
+		Addr:    "localhost:" + port,
+		Handler: mux,
+	}
+
+	return server, nil
+}
+
 func main() {
-	// (1) read model root via env SFS_ROOT or default (use engine.DefaultConfig with empty modelRoot to auto-resolve, index path = a .sfsindex under the model root or cwd).
 	sfsRoot := os.Getenv("SFS_ROOT")
 	var cfg engine.Config
 	if sfsRoot != "" {
@@ -721,8 +1618,6 @@ func main() {
 		}
 		cfg = engine.DefaultConfig(absRoot, filepath.Join(absRoot, ".sfsindex"))
 	} else {
-		// Default case: use engine.DefaultConfig with empty modelRoot to auto-resolve,
-		// and index path is a .sfsindex under the cwd.
 		cwd, err := os.Getwd()
 		if err != nil {
 			log.Fatalf("Error getting current working directory: %v", err)
@@ -730,34 +1625,16 @@ func main() {
 		cfg = engine.DefaultConfig("", filepath.Join(cwd, ".sfsindex"))
 	}
 
-	log.Printf("Initializing SFS Search Engine...")
-	log.Printf("Model Root: %s", cfg.ModelRoot)
-	log.Printf("Index Path: %s", cfg.IndexPath)
-
-	// (2) create the engine
-	eng, err := engine.New(cfg)
-	if err != nil {
-		log.Fatalf("Failed to initialize search engine: %v", err)
-	}
-
-	// (3) start an HTTP server on localhost:8765 (configurable via env SFS_PORT)
 	port := os.Getenv("SFS_PORT")
 	if port == "" {
 		port = "8765"
 	}
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", handleHome)
-	mux.HandleFunc("/api/search", handleSearch(eng))
-	mux.HandleFunc("/api/index", handleIndex(eng))
-	mux.HandleFunc("/api/health", handleHealth)
-
-	server := &http.Server{
-		Addr:    "localhost:" + port,
-		Handler: mux,
+	server, err := StartServer(port, cfg)
+	if err != nil {
+		log.Fatalf("Failed to create HTTP server: %v", err)
 	}
 
-	// Set up graceful shutdown
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
@@ -778,10 +1655,14 @@ func main() {
 		log.Printf("Server Shutdown Failed: %v", err)
 	}
 
-	log.Println("Closing search engine...")
-	if err := eng.Close(); err != nil {
-		log.Printf("Error closing engine: %v", err)
+	engineMutex.Lock()
+	if globalEngine != nil {
+		log.Println("Closing search engine...")
+		if err := globalEngine.Close(); err != nil {
+			log.Printf("Error closing engine: %v", err)
+		}
 	}
+	engineMutex.Unlock()
 
 	log.Println("Server exited successfully")
 }
