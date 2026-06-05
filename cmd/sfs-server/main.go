@@ -54,17 +54,17 @@ const htmlContent = `<!DOCTYPE html>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-color: #0b0f19;
-            --panel-bg: rgba(17, 24, 39, 0.7);
-            --border-color: rgba(255, 255, 255, 0.08);
-            --text-primary: #f3f4f6;
-            --text-secondary: #9ca3af;
-            --primary: #6366f1;
-            --primary-glow: rgba(99, 102, 241, 0.15);
+            --bg-color: #ffffff;
+            --panel-bg: #ffffff;
+            --border-color: #e5e7eb;
+            --text-primary: #111827;
+            --text-secondary: #4b5563;
+            --primary: #1a73e8;
+            --primary-glow: rgba(26, 115, 232, 0.15);
             --exact-color: #10b981;
-            --exact-glow: rgba(16, 185, 129, 0.1);
-            --suggest-color: #3b82f6;
-            --suggest-glow: rgba(59, 130, 246, 0.1);
+            --exact-glow: rgba(16, 185, 129, 0.05);
+            --suggest-color: #1a0dab;
+            --suggest-glow: rgba(26, 13, 171, 0.05);
             --font-main: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
         }
         
@@ -96,16 +96,17 @@ const htmlContent = `<!DOCTYPE html>
             pointer-events: none;
             z-index: -1;
             background: 
-                radial-gradient(circle at 10% 20%, rgba(99, 102, 241, 0.05) 0%, transparent 40%),
-                radial-gradient(circle at 90% 80%, rgba(16, 185, 129, 0.05) 0%, transparent 40%);
+                radial-gradient(circle at 10% 20%, rgba(26, 115, 232, 0.03) 0%, transparent 40%),
+                radial-gradient(circle at 90% 80%, rgba(16, 185, 129, 0.03) 0%, transparent 40%);
         }
 
         .container {
             width: 100%;
-            max-width: 1200px;
+            max-width: 700px;
             display: flex;
             flex-direction: column;
             gap: 1.5rem;
+            margin: 0 auto;
         }
 
         /* Navigation styling */
@@ -119,14 +120,14 @@ const htmlContent = `<!DOCTYPE html>
             border-radius: 9999px;
             padding: 0.5rem 1.5rem;
             backdrop-filter: blur(12px);
-            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 1px 6px rgba(32,33,36,0.05);
         }
 
         .nav-brand {
             font-weight: 700;
             font-size: 0.95rem;
             letter-spacing: 0.1em;
-            background: linear-gradient(135deg, #a5b4fc 0%, #6366f1 100%);
+            background: linear-gradient(135deg, #111827 0%, #1a73e8 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
@@ -154,19 +155,19 @@ const htmlContent = `<!DOCTYPE html>
 
         .nav-link:hover {
             color: var(--text-primary);
-            background: rgba(255, 255, 255, 0.04);
+            background: rgba(0, 0, 0, 0.04);
         }
 
         .nav-link.active {
             color: white;
             background: var(--primary);
-            box-shadow: 0 4px 12px var(--primary-glow);
+            box-shadow: 0 2px 6px var(--primary-glow);
         }
 
         /* Setup banner styling */
         .setup-banner {
-            background: rgba(239, 68, 68, 0.07);
-            border: 1px solid rgba(239, 68, 68, 0.2);
+            background: rgba(239, 68, 68, 0.05);
+            border: 1px solid rgba(239, 68, 68, 0.15);
             border-radius: 12px;
             padding: 0.75rem 1.25rem;
             display: none;
@@ -180,7 +181,7 @@ const htmlContent = `<!DOCTYPE html>
         }
 
         .setup-text {
-            color: #fca5a5;
+            color: #dc2626;
             font-size: 0.9rem;
             display: flex;
             align-items: center;
@@ -201,7 +202,7 @@ const htmlContent = `<!DOCTYPE html>
 
         .setup-btn:hover {
             background: #dc2626;
-            box-shadow: 0 0 10px rgba(239, 68, 68, 0.3);
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.2);
         }
 
         .setup-btn:disabled {
@@ -218,7 +219,7 @@ const htmlContent = `<!DOCTYPE html>
         h1 {
             font-size: 2.2rem;
             font-weight: 700;
-            background: linear-gradient(135deg, #fff 0%, #a5b4fc 100%);
+            background: linear-gradient(135deg, #111827 0%, #1a73e8 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             letter-spacing: -0.025em;
@@ -232,7 +233,6 @@ const htmlContent = `<!DOCTYPE html>
 
         .search-container {
             position: relative;
-            max-width: 700px;
             width: 100%;
             margin: 0 auto;
         }
@@ -248,19 +248,18 @@ const htmlContent = `<!DOCTYPE html>
             padding: 1rem 1.5rem 1rem 3.5rem;
             font-size: 1.05rem;
             font-family: var(--font-main);
-            background: var(--panel-bg);
-            border: 1px solid var(--border-color);
+            background: #ffffff;
+            border: 1px solid #dfe1e5;
             border-radius: 9999px;
-            color: var(--text-primary);
+            color: #202124;
             outline: none;
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            backdrop-filter: blur(12px);
-            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 1px 6px rgba(32,33,36,0.05);
         }
 
         .search-input:focus {
-            border-color: var(--primary);
-            box-shadow: 0 0 0 4px var(--primary-glow), 0 4px 30px rgba(0, 0, 0, 0.3);
+            border-color: rgba(223,225,229,0);
+            box-shadow: 0 1px 6px rgba(32,33,36,0.28);
         }
 
         .search-icon {
@@ -282,7 +281,7 @@ const htmlContent = `<!DOCTYPE html>
             right: 1.5rem;
             width: 1.2rem;
             height: 1.2rem;
-            border: 2px solid rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(0, 0, 0, 0.05);
             border-top: 2px solid var(--primary);
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
@@ -299,29 +298,30 @@ const htmlContent = `<!DOCTYPE html>
             100% { transform: rotate(360deg); }
         }
 
-        .results-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 1.5rem;
-            margin-top: 0.5rem;
-        }
-
-        @media (max-width: 868px) {
-            .results-grid {
-                grid-template-columns: 1fr;
-            }
+        .results-container {
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+            width: 100%;
+            margin-top: 1rem;
         }
 
         .results-column {
-            background: var(--panel-bg);
+            background: #ffffff;
             border: 1px solid var(--border-color);
             border-radius: 16px;
             padding: 1.5rem;
-            backdrop-filter: blur(8px);
             display: flex;
             flex-direction: column;
             gap: 1.25rem;
-            min-height: 300px;
+            min-height: 150px;
+        }
+
+        .results-section {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
         }
 
         .column-header {
@@ -347,7 +347,7 @@ const htmlContent = `<!DOCTYPE html>
         }
 
         .column-title.suggest {
-            color: var(--suggest-color);
+            color: var(--primary);
         }
 
         .badge-count {
@@ -364,63 +364,66 @@ const htmlContent = `<!DOCTYPE html>
         }
 
         .suggest .badge-count {
-            background: var(--suggest-glow);
-            border: 1px solid rgba(59, 130, 246, 0.2);
-            color: var(--suggest-color);
+            background: var(--primary-glow);
+            border: 1px solid rgba(26, 115, 232, 0.2);
+            color: var(--primary);
         }
 
         .results-list {
             display: flex;
             flex-direction: column;
-            gap: 1rem;
+            gap: 1.75rem;
+            margin-top: 0.75rem;
         }
 
         .result-card {
-            background: rgba(255, 255, 255, 0.02);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            padding: 1rem;
-            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-            position: relative;
-            overflow: hidden;
+            background: transparent;
+            border: none;
+            padding: 0;
             display: flex;
             flex-direction: column;
-            gap: 0.75rem;
-        }
-
-        .result-card:hover {
-            transform: translateY(-2px);
-            background: rgba(255, 255, 255, 0.04);
-            border-color: rgba(255, 255, 255, 0.15);
-            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+            gap: 0.4rem;
         }
 
         .result-header {
             display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            gap: 1rem;
+            flex-direction: column;
+            gap: 0.2rem;
         }
 
-        .file-path-container {
+        .file-path-row {
             display: flex;
             align-items: center;
             gap: 0.5rem;
-            max-width: 80%;
+            font-size: 0.8rem;
+            color: #202124;
+            opacity: 0.75;
         }
 
-        .file-path {
-            font-size: 0.8rem;
-            color: var(--text-secondary);
+        .file-path-text {
             word-break: break-all;
             font-family: monospace;
-            line-height: 1.4;
+        }
+
+        .filename-link {
+            font-size: 1.2rem;
+            color: #1a0dab;
+            text-decoration: none;
+            font-weight: 600;
+            cursor: pointer;
+            word-break: break-all;
+            line-height: 1.3;
+            width: fit-content;
+        }
+
+        .filename-link:hover {
+            text-decoration: underline;
         }
 
         .copy-btn {
             background: none;
             border: none;
-            color: var(--text-secondary);
+            color: #70757a;
             cursor: pointer;
             padding: 2px;
             display: inline-flex;
@@ -431,34 +434,27 @@ const htmlContent = `<!DOCTYPE html>
         }
 
         .copy-btn:hover {
-            color: var(--text-primary);
-            background: rgba(255, 255, 255, 0.1);
+            color: #202124;
+            background: rgba(0, 0, 0, 0.05);
         }
 
-        .score-badge {
+        .result-meta-row {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 0.15rem;
+        }
+
+        .score-text {
             font-size: 0.75rem;
-            font-weight: 600;
-            padding: 0.2rem 0.5rem;
-            border-radius: 6px;
+            color: #70757a;
             font-family: monospace;
-        }
-
-        .exact .score-badge {
-            background: var(--exact-glow);
-            color: var(--exact-color);
-            border: 1px solid rgba(16, 185, 129, 0.15);
-        }
-
-        .suggest .score-badge {
-            background: var(--suggest-glow);
-            color: var(--suggest-color);
-            border: 1px solid rgba(59, 130, 246, 0.15);
         }
 
         .result-text {
             font-size: 0.9rem;
-            line-height: 1.6;
-            color: rgba(255, 255, 255, 0.85);
+            line-height: 1.57;
+            color: #4d5156;
             white-space: pre-wrap;
             word-break: break-word;
         }
@@ -478,24 +474,24 @@ const htmlContent = `<!DOCTYPE html>
         .empty-state svg {
             width: 2.5rem;
             height: 2.5rem;
-            color: rgba(255, 255, 255, 0.1);
+            color: #dadce0;
             margin-bottom: 0.5rem;
         }
 
         .toast {
             position: fixed;
             bottom: 2rem;
-            background: rgba(16, 185, 129, 0.9);
+            background: #323232;
             color: white;
             padding: 0.75rem 1.5rem;
-            border-radius: 9999px;
+            border-radius: 4px;
             font-size: 0.9rem;
-            font-weight: 500;
-            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3);
+            font-weight: 400;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
             pointer-events: none;
             opacity: 0;
             transform: translateY(1rem);
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: all 0.2s ease-in-out;
             z-index: 100;
         }
 
@@ -511,8 +507,8 @@ const htmlContent = `<!DOCTYPE html>
         }
 
         .indexing-indicator {
-            background: rgba(99, 102, 241, 0.08);
-            border: 1px solid rgba(99, 102, 241, 0.2);
+            background: rgba(26, 115, 232, 0.05);
+            border: 1px solid rgba(26, 115, 232, 0.15);
             border-radius: 12px;
             padding: 0.6rem 1.25rem;
             display: flex;
@@ -526,7 +522,7 @@ const htmlContent = `<!DOCTYPE html>
         .indexing-spinner {
             width: 1rem;
             height: 1rem;
-            border: 2px solid rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(0, 0, 0, 0.05);
             border-top: 2px solid var(--primary);
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
@@ -536,6 +532,130 @@ const htmlContent = `<!DOCTYPE html>
             0% { opacity: 0.7; }
             50% { opacity: 1; }
             100% { opacity: 0.7; }
+        }
+
+        .indexing-notice {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--primary);
+            background: rgba(26, 115, 232, 0.05);
+            border: 1px solid rgba(26, 115, 232, 0.15);
+            border-radius: 12px;
+            padding: 1rem;
+            margin-top: 1rem;
+            text-align: center;
+        }
+
+        /* Detail Modal styling */
+        .detail-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 2000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(4px);
+        }
+
+        .detail-modal-content {
+            background: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 2rem;
+            max-width: 650px;
+            width: 90%;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            max-height: 85vh;
+            overflow-y: auto;
+        }
+
+        .detail-modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 0.75rem;
+        }
+
+        .detail-modal-header h3 {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 1.75rem;
+            line-height: 1;
+            color: var(--text-secondary);
+            cursor: pointer;
+            padding: 0 0.5rem;
+            transition: color 0.2s;
+        }
+
+        .close-btn:hover {
+            color: var(--text-primary);
+        }
+
+        .detail-modal-body {
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+        }
+
+        .detail-field {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+
+        .detail-label {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .detail-value {
+            font-size: 0.95rem;
+            color: var(--text-primary);
+            word-break: break-all;
+        }
+
+        .detail-value.bold {
+            font-weight: 700;
+        }
+
+        .detail-value.monospace {
+            font-family: monospace;
+            background: #f3f4f6;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.85rem;
+        }
+
+        .detail-content-text {
+            font-size: 0.95rem;
+            line-height: 1.6;
+            color: var(--text-primary);
+            white-space: pre-wrap;
+            word-break: break-word;
+            background: #f9fafb;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem;
+            max-height: 300px;
+            overflow-y: auto;
         }
 
         .onboard-modal {
@@ -646,9 +766,9 @@ const htmlContent = `<!DOCTYPE html>
                 </div>
             </div>
 
-            <div class="results-grid">
-                <!-- CHÍNH XÁC Column -->
-                <div class="results-column exact">
+            <div class="results-container">
+                <!-- CHÍNH XÁC Section -->
+                <div class="results-section exact" id="exact-section" style="display:none">
                     <div class="column-header">
                         <div class="column-title exact">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
@@ -656,16 +776,11 @@ const htmlContent = `<!DOCTYPE html>
                             <span id="exact-count" class="badge-count" style="display:none">0</span>
                         </div>
                     </div>
-                    <div id="exact-list" class="results-list">
-                        <div class="empty-state">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-                            <div>Chưa có tìm kiếm</div>
-                        </div>
-                    </div>
+                    <div id="exact-list" class="results-list"></div>
                 </div>
 
-                <!-- GỢI Ý Column -->
-                <div class="results-column suggest">
+                <!-- GỢI Ý Section -->
+                <div class="results-section suggest" id="suggest-section" style="display:none">
                     <div class="column-header">
                         <div class="column-title suggest">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
@@ -673,12 +788,13 @@ const htmlContent = `<!DOCTYPE html>
                             <span id="suggest-count" class="badge-count" style="display:none">0</span>
                         </div>
                     </div>
-                    <div id="suggest-list" class="results-list">
-                        <div class="empty-state">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-                            <div>Chưa có tìm kiếm</div>
-                        </div>
-                    </div>
+                    <div id="suggest-list" class="results-list"></div>
+                </div>
+
+                <!-- Status/Empty message area -->
+                <div id="results-message" class="empty-state">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                    <div>Chưa có tìm kiếm</div>
                 </div>
             </div>
         </div>
@@ -722,6 +838,39 @@ const htmlContent = `<!DOCTYPE html>
         </div>
     </div>
 
+    <!-- Detail Modal -->
+    <div id="detail-modal" class="detail-modal" style="display:none" onclick="closeDetailModal(event)">
+        <div class="detail-modal-content" onclick="event.stopPropagation()">
+            <div class="detail-modal-header">
+                <h3>Chi tiết tài liệu</h3>
+                <button class="close-btn" onclick="hideDetailModal()">&times;</button>
+            </div>
+            <div class="detail-modal-body">
+                <div class="detail-field">
+                    <span class="detail-label">Tên file:</span>
+                    <span id="detail-filename" class="detail-value bold"></span>
+                </div>
+                <div class="detail-field">
+                    <span class="detail-label">Đường dẫn:</span>
+                    <div style="display: flex; gap: 0.5rem; align-items: center;">
+                        <span id="detail-filepath" class="detail-value monospace"></span>
+                        <button class="copy-btn" id="detail-copy-btn" title="Sao chép đường dẫn">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="detail-field">
+                    <span class="detail-label">Điểm số (Score):</span>
+                    <span id="detail-score" class="detail-value monospace"></span>
+                </div>
+                <div class="detail-field">
+                    <span class="detail-label">Nội dung đoạn trích:</span>
+                    <div id="detail-content" class="detail-content-text"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div id="toast" class="toast">Đã sao chép đường dẫn file!</div>
 
     <script>
@@ -736,6 +885,7 @@ const htmlContent = `<!DOCTYPE html>
         let debounceTimer;
         let chosenPathStr = '';
         let isPollingStatus = false;
+        let isIndexingActive = false;
 
         // View Toggling
         function showView(viewName) {
@@ -893,12 +1043,16 @@ const htmlContent = `<!DOCTYPE html>
             exactCount.style.display = 'none';
             suggestCount.style.display = 'none';
             
-            const emptyHTML = '<div class="empty-state">' +
-                '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>' +
-                '<div>Chưa có tìm kiếm</div>' +
-                '</div>';
-            exactList.innerHTML = emptyHTML;
-            suggestList.innerHTML = emptyHTML;
+            const exactSection = document.getElementById('exact-section');
+            const suggestSection = document.getElementById('suggest-section');
+            const resultsMessage = document.getElementById('results-message');
+
+            exactSection.style.display = 'none';
+            suggestSection.style.display = 'none';
+            resultsMessage.style.display = 'flex';
+            resultsMessage.className = 'empty-state';
+            resultsMessage.style.color = '';
+            resultsMessage.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></svg><div>Chưa có tìm kiếm</div>';
         }
 
         async function fetchResults(query) {
@@ -923,12 +1077,16 @@ const htmlContent = `<!DOCTYPE html>
 
         function showErrorState(msg) {
             const displayMsg = msg || 'Lỗi kết nối máy chủ';
-            const errorHTML = '<div class="empty-state" style="color: #ef4444;">' +
-                '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>' +
-                '<div>' + displayMsg + '</div>' +
-                '</div>';
-            exactList.innerHTML = errorHTML;
-            suggestList.innerHTML = errorHTML;
+            const exactSection = document.getElementById('exact-section');
+            const suggestSection = document.getElementById('suggest-section');
+            const resultsMessage = document.getElementById('results-message');
+
+            exactSection.style.display = 'none';
+            suggestSection.style.display = 'none';
+            resultsMessage.style.display = 'flex';
+            resultsMessage.className = 'empty-state';
+            resultsMessage.style.color = '#ef4444';
+            resultsMessage.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></svg><div>' + displayMsg + '</div>';
         }
 
         function renderResults(data) {
@@ -941,22 +1099,47 @@ const htmlContent = `<!DOCTYPE html>
             suggestCount.textContent = suggest.length;
             suggestCount.style.display = suggest.length > 0 ? 'inline-block' : 'none';
 
-            if (exact.length === 0) {
-                exactList.innerHTML = '<div class="empty-state">' +
-                    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>' +
-                    '<div>Không có kết quả chính xác</div>' +
-                    '</div>';
-            } else {
-                exactList.innerHTML = exact.map(item => createCardHTML(item)).join('');
-            }
+            const totalResults = exact.length + suggest.length;
 
-            if (suggest.length === 0) {
-                suggestList.innerHTML = '<div class="empty-state">' +
-                    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>' +
-                    '<div>Không có kết quả gợi ý</div>' +
-                    '</div>';
+            const exactSection = document.getElementById('exact-section');
+            const suggestSection = document.getElementById('suggest-section');
+            const resultsMessage = document.getElementById('results-message');
+
+            resultsMessage.style.color = '';
+
+            if (totalResults === 0) {
+                exactSection.style.display = 'none';
+                suggestSection.style.display = 'none';
+                resultsMessage.style.display = 'flex';
+                resultsMessage.className = 'empty-state';
+                if (isIndexingActive) {
+                    resultsMessage.innerHTML = '<div style="color: var(--primary); font-weight: 500;">⏳ Đang lập chỉ mục thêm tài liệu, kết quả sẽ đầy đủ hơn sau...</div>';
+                } else {
+                    resultsMessage.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></svg><div>Không tìm thấy kết quả</div>';
+                }
             } else {
-                suggestList.innerHTML = suggest.map(item => createCardHTML(item)).join('');
+                exactSection.style.display = exact.length > 0 ? 'flex' : 'none';
+                suggestSection.style.display = suggest.length > 0 ? 'flex' : 'none';
+                
+                if (exact.length > 0) {
+                    exactList.innerHTML = exact.map(item => createCardHTML(item)).join('');
+                } else {
+                    exactList.innerHTML = '';
+                }
+
+                if (suggest.length > 0) {
+                    suggestList.innerHTML = suggest.map(item => createCardHTML(item)).join('');
+                } else {
+                    suggestList.innerHTML = '';
+                }
+
+                if (isIndexingActive && totalResults < 3) {
+                    resultsMessage.style.display = 'flex';
+                    resultsMessage.className = 'indexing-notice';
+                    resultsMessage.innerHTML = '<div style="color: var(--primary); font-weight: 500; text-align: center; width: 100%;">⏳ Đang lập chỉ mục thêm tài liệu, kết quả sẽ đầy đủ hơn sau...</div>';
+                } else {
+                    resultsMessage.style.display = 'none';
+                }
             }
         }
 
@@ -975,20 +1158,60 @@ const htmlContent = `<!DOCTYPE html>
                 .replace(/"/g, "&quot;")
                 .replace(/'/g, "&#039;");
 
+            const filename = escapedPath.split(/[/\\]/).pop();
             const displayScore = typeof item.score === 'number' ? item.score.toFixed(4) : 'N/A';
+
+            const jsonStr = JSON.stringify({
+                filename: filename,
+                filepath: item.filePath,
+                score: displayScore,
+                text: item.text
+            }).replace(/'/g, "&#39;").replace(/"/g, "&quot;");
 
             return '<div class="result-card">' +
                    '  <div class="result-header">' +
-                   '    <div class="file-path-container">' +
-                   '      <span class="file-path" title="' + escapedPath + '">' + escapedPath + '</span>' +
+                   '    <a class="filename-link" onclick="showDetailFromJSON(this.getAttribute(\'data-json\'))" data-json="' + jsonStr + '" title="Xem chi tiết">' + filename + '</a>' +
+                   '    <div class="file-path-row">' +
+                   '      <span class="file-path-text" title="' + escapedPath + '">' + escapedPath + '</span>' +
                    '      <button class="copy-btn" onclick="copyToClipboard(this.getAttribute(\'data-path\'))" data-path="' + escapedPath + '" title="Sao chép đường dẫn">' +
                    '        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>' +
                    '      </button>' +
                    '    </div>' +
-                   '    <span class="score-badge">Score: ' + displayScore + '</span>' +
                    '  </div>' +
                    '  <div class="result-text">' + escapedText + '</div>' +
+                   '  <div class="result-meta-row">' +
+                   '    <span class="score-text">Score: ' + displayScore + '</span>' +
+                   '  </div>' +
                    '</div>';
+        }
+
+        function showDetail(filename, filepath, score, text) {
+            document.getElementById('detail-filename').textContent = filename;
+            document.getElementById('detail-filepath').textContent = filepath;
+            document.getElementById('detail-score').textContent = score;
+            document.getElementById('detail-content').textContent = text;
+            
+            const copyBtn = document.getElementById('detail-copy-btn');
+            copyBtn.onclick = () => {
+                copyToClipboard(filepath);
+            };
+
+            document.getElementById('detail-modal').style.display = 'flex';
+        }
+
+        function hideDetailModal() {
+            document.getElementById('detail-modal').style.display = 'none';
+        }
+
+        function closeDetailModal(event) {
+            if (event.target.id === 'detail-modal') {
+                hideDetailModal();
+            }
+        }
+
+        function showDetailFromJSON(jsonStr) {
+            const data = JSON.parse(jsonStr);
+            showDetail(data.filename, data.filepath, data.score, data.text);
         }
 
         // Setup Banner / Status Polling Logic
@@ -1000,6 +1223,8 @@ const htmlContent = `<!DOCTYPE html>
                 const response = await fetch('/api/status');
                 if (!response.ok) return;
                 const status = await response.json();
+
+                isIndexingActive = (status.indexing === true) || (status.phase === 'background' || status.phase === 'fast');
 
                 const banner = document.getElementById('setup-banner');
                 const bannerMsg = document.getElementById('setup-banner-msg');
@@ -1034,8 +1259,8 @@ const htmlContent = `<!DOCTYPE html>
                         searchInput.disabled = false;
                         searchInput.placeholder = "Nhập từ khóa tìm kiếm...";
                     } else {
-                        searchInput.disabled = true;
-                        searchInput.placeholder = "Đang lập chỉ mục thư mục...";
+                        searchInput.disabled = false;
+                        searchInput.placeholder = "Nhập từ khóa tìm kiếm...";
                     }
 
                     if (wasMissing) {
