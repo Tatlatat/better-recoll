@@ -45,15 +45,23 @@ CLI (cmd/sfs)  +  GUI Fyne (cmd/sfs-gui)
 ```
 **Ba interface thay-thế-được:** `model.Embedder` (pha sau đổi sang GPU server không sửa app), `store.Store`, `reader.FileReader` (cắm OCR sau).
 
-## Số đo đã verify
+## Giao diện (3 cách dùng)
+- **`sfs-app`** — app desktop (webview): thanh tìm + 2 ô Chính xác/Gợi ý + trang Cài đặt (chọn thư mục, tải model). **Gõ tiếng Việt hoàn hảo** (engine browser, không như Fyne). **Phím tắt toàn cục ⌘⇧Space** gọi tìm như Spotlight + **icon menu bar**.
+- **`sfs-server`** — chỉ server web (mở `localhost:8765` trong trình duyệt).
+- **`sfs`** — CLI (`sfs setup`, `sfs index <dir>`, `sfs search <q>`).
+
+## Số đo & độ bền đã verify
 - **Parity Go↔Python**: vector embedding khớp cosine = **1.000000** trên 20 câu Việt-Anh (tokenizer Go khớp byte-by-byte → không recall-sai-âm-thầm).
 - **Recall cross-encoder**: **1.00 (10/10)** trên bộ cặp xây-dựng khó (không dấu + chéo ngôn ngữ), ~128 ms/query.
-- **Tốc độ tìm** (kho 200 file, CPU M4 Max, van `RerankK=5`): avg **889 ms**, p-max **986 ms** — dưới 1 giây.
-- 9 package test xanh, `go vet` sạch.
+- **Tốc độ tìm** (van `RerankK=5`, CPU M4 Max): avg **889 ms**, p-max **986 ms** — dưới 1 giây.
+- **PDF tiếng Việt**: đọc qua poppler (`pdftotext`) — robust, không panic; index 165 file thật (RMIT, nhiều PDF học thuật VN) chạy trọn không crash.
+- **Độ bền (stress test)**: chịu được file rỗng/rác/giả-PDF/khổng-lồ, tên file unicode VN, query rỗng/siêu-dài/ký-tự-lạ, **search đồng thời (race detector sạch)**, file trùng, re-index. 9 package test xanh, `go vet` sạch, `-race` sạch.
+- **Index không nóng máy**: 2 pha — onboarding (full cores, nhanh) + nền (1 luồng + nghỉ = mát). Một file lỗi không làm sập cả index (skip + tiếp tục).
 
 ## Yêu cầu
 - Go 1.26+, macOS arm64 (đã test trên M4 Max).
 - `libonnxruntime.dylib` (`brew install onnxruntime`).
+- `poppler` cho đọc PDF tiếng Việt tốt (`brew install poppler`) — thiếu thì fallback thư viện Go.
 - `libtokenizers.a` cho cgo: tải prebuilt từ
   `github.com/daulet/tokenizers/releases/download/v1.27.0/libtokenizers.darwin-aarch64.tar.gz`,
   giải nén vào `/opt/homebrew/lib/libtokenizers.a`.
