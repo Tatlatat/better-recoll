@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"sfs/internal/chunk"
 	"sfs/internal/dedupe"
@@ -146,25 +148,86 @@ type pendingChunk struct {
 	offset   int
 }
 
+// IndexOptions represents parameters for throttled indexing.
+type IndexOptions struct {
+	Workers             int
+	BatchSize           int
+	PauseBetweenBatches time.Duration
+	OnlyExtensions      []string
+	MaxFileBytes        int64
+}
+
+// FastIndexOptions returns options optimized for fast onboarding.
+func FastIndexOptions() IndexOptions {
+	return IndexOptions{
+		Workers:             runtime.NumCPU(),
+		BatchSize:           32,
+		PauseBetweenBatches: 0,
+	}
+}
+
+// BackgroundIndexOptions returns options optimized for cool background indexing.
+func BackgroundIndexOptions() IndexOptions {
+	return IndexOptions{
+		Workers:             1,
+		BatchSize:           8,
+		PauseBetweenBatches: 400 * time.Millisecond,
+	}
+}
+
 // Index walks the directory recursively, parses supported files,
 // chunks their text, embeds chunks, and writes/indexes them.
 func (e *Engine) Index(dir string) error {
+	return e.IndexThrottled(dir, FastIndexOptions())
+}
+
+// IndexThrottled walks the directory recursively, collects supported files,
+// and indexes them in throttled batches to prevent CPU overheating.
+func (e *Engine) IndexThrottled(dir string, opts IndexOptions) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
 	var pending []pendingChunk
 	finder := dedupe.New(2)
 
+	cleanDir := filepath.Clean(dir)
 	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
 		if info.IsDir() {
+			if filepath.Clean(path) != cleanDir && strings.HasPrefix(info.Name(), ".") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if strings.HasPrefix(info.Name(), ".") {
 			return nil
 		}
 
 		ext := strings.ToLower(filepath.Ext(path))
 		if _, ok := reader.Registry[ext]; !ok {
+			return nil
+		}
+
+		if len(opts.OnlyExtensions) > 0 {
+			allowed := false
+			for _, allowedExt := range opts.OnlyExtensions {
+				a := strings.ToLower(allowedExt)
+				if !strings.HasPrefix(a, ".") {
+					a = "." + a
+				}
+				if ext == a {
+					allowed = true
+					break
+				}
+			}
+			if !allowed {
+				return nil
+			}
+		}
+
+		if opts.MaxFileBytes > 0 && info.Size() > opts.MaxFileBytes {
 			return nil
 		}
 
@@ -196,44 +259,115 @@ func (e *Engine) Index(dir string) error {
 	// Finalize dedupe finder (first pass completed)
 	finder.Build()
 
-	// Batch-embed all chunk texts
-	textsToEmbed := make([]string, len(pending))
-	for i, pc := range pending {
-		textsToEmbed[i] = pc.text
+	batchSize := opts.BatchSize
+	if batchSize <= 0 {
+		batchSize = 32
 	}
-	vectors, err := e.embedder.Embed(textsToEmbed)
-	if err != nil {
-		return fmt.Errorf("failed to embed chunk texts: %w", err)
+	workers := opts.Workers
+	if workers <= 0 {
+		workers = 1
 	}
 
-	// Build store.Chunk records (second pass: set IsBoilerplate)
-	storeChunks := make([]store.Chunk, len(pending))
-	for i, pc := range pending {
-		id := e.nextID
-		e.nextID++
-
-		storeChunks[i] = store.Chunk{
-			ID:            id,
-			FilePath:      pc.filePath,
-			Text:          pc.text,
-			NormText:      pc.normText,
-			Offset:        pc.offset,
-			Vector:        vectors[i],
-			IsBoilerplate: finder.IsBoilerplate(pc.text),
+	var batches [][]pendingChunk
+	for i := 0; i < len(pending); i += batchSize {
+		end := i + batchSize
+		if end > len(pending) {
+			end = len(pending)
 		}
+		batches = append(batches, pending[i:end])
 	}
 
-	// Write chunks to store
-	if err := e.store.Write(storeChunks); err != nil {
-		return fmt.Errorf("failed to write chunks to store: %w", err)
+	type batchJob struct {
+		chunk []pendingChunk
 	}
 
-	// Add to indexes (respect DiffEmbed)
-	for _, sc := range storeChunks {
-		e.bm25.Add(sc.ID, sc.NormText)
-		if !(e.diffEmbed && sc.IsBoilerplate) {
-			e.vindex.Add(sc.ID, sc.Vector)
-		}
+	jobs := make(chan batchJob, len(batches))
+	for _, b := range batches {
+		jobs <- batchJob{chunk: b}
+	}
+	close(jobs)
+
+	var wg sync.WaitGroup
+	var errOnce sync.Once
+	var workerErr error
+
+	setWorkerErr := func(err error) {
+		errOnce.Do(func() {
+			workerErr = err
+		})
+	}
+
+	var writeMu sync.Mutex
+
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for job := range jobs {
+				writeMu.Lock()
+				hasErr := workerErr != nil
+				writeMu.Unlock()
+				if hasErr {
+					return
+				}
+
+				texts := make([]string, len(job.chunk))
+				for i, pc := range job.chunk {
+					texts[i] = pc.text
+				}
+
+				vectors, err := e.embedder.Embed(texts)
+				if err != nil {
+					setWorkerErr(fmt.Errorf("failed to embed chunk texts: %w", err))
+					return
+				}
+
+				writeMu.Lock()
+				if workerErr != nil {
+					writeMu.Unlock()
+					return
+				}
+
+				storeChunks := make([]store.Chunk, len(job.chunk))
+				for i, pc := range job.chunk {
+					id := e.nextID
+					e.nextID++
+
+					storeChunks[i] = store.Chunk{
+						ID:            id,
+						FilePath:      pc.filePath,
+						Text:          pc.text,
+						NormText:      pc.normText,
+						Offset:        pc.offset,
+						Vector:        vectors[i],
+						IsBoilerplate: finder.IsBoilerplate(pc.text),
+					}
+				}
+
+				if err := e.store.Write(storeChunks); err != nil {
+					setWorkerErr(fmt.Errorf("failed to write chunks to store: %w", err))
+					writeMu.Unlock()
+					return
+				}
+
+				for _, sc := range storeChunks {
+					e.bm25.Add(sc.ID, sc.NormText)
+					if !(e.diffEmbed && sc.IsBoilerplate) {
+						e.vindex.Add(sc.ID, sc.Vector)
+					}
+				}
+				writeMu.Unlock()
+
+				if opts.PauseBetweenBatches > 0 {
+					time.Sleep(opts.PauseBetweenBatches)
+				}
+			}
+		}()
+	}
+	wg.Wait()
+
+	if workerErr != nil {
+		return workerErr
 	}
 
 	// Finalize BM25 IDF parameters
