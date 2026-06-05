@@ -9,8 +9,15 @@ import (
 	"sfs/internal/normalize"
 )
 
-// RankedResults holds search results partitioned into Exact (prob >= 0.5)
-// and Suggest (prob < 0.5) buckets after cross-encoder reranking.
+// ExactThreshold: ngưỡng sigmoid(logit reranker) để vào ô "Chính xác".
+// Calibrate bằng số đo thật trên tài liệu xây dựng VN: query ĐÚNG cho score
+// 0.14–0.94 (tùy độ khớp), query KHÔNG liên quan cho ~0.00002 (cross-encoder
+// loại tuyệt đối). Khoảng cách 3+ bậc → đặt 0.05: bắt cả kết quả đúng yếu, mà
+// rác (~0.00002) vẫn rớt rõ xuống Gợi ý.
+const ExactThreshold = 0.05
+
+// RankedResults holds search results partitioned into Exact (prob >= ExactThreshold)
+// and Suggest (prob < ExactThreshold) buckets after cross-encoder reranking.
 type RankedResults struct {
 	Exact   []Result
 	Suggest []Result
@@ -126,13 +133,13 @@ func (e *Engine) SearchRanked(query string, k int) (RankedResults, error) {
 		candidates = candidates[:k]
 	}
 
-	// Bucket candidates based on sigmoid(logit) threshold >= 0.5
+	// Bucket candidates based on sigmoid(logit) vs ExactThreshold
 	var exact []Result
 	var suggest []Result
 	for _, c := range candidates {
 		prob := sigmoid(c.Score)
 		c.Score = prob
-		if prob >= 0.5 {
+		if prob >= ExactThreshold {
 			exact = append(exact, c)
 		} else {
 			suggest = append(suggest, c)
