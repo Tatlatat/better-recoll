@@ -16,7 +16,9 @@ import (
 
 	"sfs/internal/engine"
 
+	"github.com/getlantern/systray"
 	"github.com/webview/webview_go"
+	"golang.design/x/hotkey"
 )
 
 // Global State
@@ -1529,7 +1531,7 @@ func main() {
 	defer w.Destroy()
 
 	w.SetTitle("better-recoll")
-	w.SetSize(900, 650, webview.HintNone)
+	w.SetSize(700, 500, webview.HintNone)
 
 	// Bind folder picker
 	w.Bind("pickFolder", func() string {
@@ -1542,6 +1544,74 @@ func main() {
 		return strings.TrimSpace(string(out))
 	})
 
+	// Run systray in a goroutine
+	go func() {
+		onReady := func() {
+			systray.SetTitle("🔍")
+			systray.SetTooltip("SFS Search Engine")
+
+			mOpen := systray.AddMenuItem("Mở tìm kiếm", "Mở tìm kiếm")
+			mSetting := systray.AddMenuItem("Cài đặt", "Cài đặt")
+			mQuit := systray.AddMenuItem("Thoát", "Thoát")
+
+			for {
+				select {
+				case <-mOpen.ClickedCh:
+					w.Dispatch(func() {
+						w.Navigate("http://localhost:" + port)
+						w.Eval("showView('search')")
+						bringToFront()
+					})
+				case <-mSetting.ClickedCh:
+					w.Dispatch(func() {
+						w.Navigate("http://localhost:" + port)
+						w.Eval("showView('setting')")
+						bringToFront()
+					})
+				case <-mQuit.ClickedCh:
+					systray.Quit()
+				}
+			}
+		}
+
+		onExit := func() {
+			w.Dispatch(func() {
+				w.Destroy()
+				os.Exit(0)
+			})
+		}
+
+		systray.Run(onReady, onExit)
+	}()
+
+	// Register global hotkey in a goroutine
+	go func() {
+		time.Sleep(1 * time.Second)
+
+		hk := hotkey.New([]hotkey.Modifier{hotkey.ModCmd, hotkey.ModShift}, hotkey.KeySpace)
+		if err := hk.Register(); err != nil {
+			log.Printf("hotkey: failed to register: %v", err)
+			return
+		}
+		defer hk.Unregister()
+
+		log.Printf("hotkey registered: Cmd+Shift+Space")
+		for range hk.Keydown() {
+			w.Dispatch(func() {
+				w.Navigate("http://localhost:" + port)
+				w.Eval("showView('search')")
+				bringToFront()
+			})
+		}
+	}()
+
 	w.Navigate("http://localhost:" + port)
 	w.Run()
+}
+
+func bringToFront() {
+	pid := os.Getpid()
+	script := fmt.Sprintf(`tell application "System Events" to set frontmost of (first process whose unix id is %d) to true`, pid)
+	cmd := exec.Command("osascript", "-e", script)
+	_ = cmd.Run()
 }
