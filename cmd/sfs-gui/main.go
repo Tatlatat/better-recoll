@@ -161,6 +161,9 @@ func main() {
 	searchButton := widget.NewButton("Tìm kiếm", nil)
 	searchButton.Disable() // Disable search button while loading
 
+	indexButton := widget.NewButton("Chọn thư mục & Index", nil)
+	indexButton.Disable()
+
 	var eng *engine.Engine
 
 	// Async engine loading
@@ -176,6 +179,7 @@ func main() {
 		statusLabel.SetText(fmt.Sprintf("Đã tải xong engine. Thư mục gốc: %s", absRoot))
 		searchEntry.Enable()
 		searchButton.Enable()
+		indexButton.Enable()
 		myWindow.Canvas().Focus(searchEntry)
 	}()
 
@@ -192,11 +196,13 @@ func main() {
 		statusLabel.SetText("Đang tìm kiếm...")
 		searchEntry.Disable()
 		searchButton.Disable()
+		indexButton.Disable()
 
 		go func() {
 			defer func() {
 				searchEntry.Enable()
 				searchButton.Enable()
+				indexButton.Enable()
 				myWindow.Canvas().Focus(searchEntry)
 			}()
 
@@ -222,6 +228,41 @@ func main() {
 	}
 	searchButton.OnTapped = performSearch
 
+	indexButton.OnTapped = func() {
+		dialog.ShowFolderOpen(func(uri fyne.ListableURI, err error) {
+			if err != nil {
+				dialog.ShowError(err, myWindow)
+				statusLabel.SetText(fmt.Sprintf("Lỗi chọn thư mục: %v", err))
+				return
+			}
+			if uri == nil {
+				return
+			}
+			path := uri.Path()
+
+			indexButton.Disable()
+			searchEntry.Disable()
+			searchButton.Disable()
+			statusLabel.SetText(fmt.Sprintf("Đang lập chỉ mục: %s ... (có thể mất vài phút)", path))
+
+			go func() {
+				defer func() {
+					indexButton.Enable()
+					searchEntry.Enable()
+					searchButton.Enable()
+				}()
+
+				err := eng.Index(path)
+				if err != nil {
+					dialog.ShowError(err, myWindow)
+					statusLabel.SetText(fmt.Sprintf("Lỗi lập chỉ mục: %v", err))
+					return
+				}
+				statusLabel.SetText(fmt.Sprintf("Đã lập chỉ mục xong thư mục: %s. Giờ bạn có thể tìm kiếm.", path))
+			}()
+		}, myWindow)
+	}
+
 	// Layout Setup
 	exactCol := container.NewBorder(
 		widget.NewLabelWithStyle("CHÍNH XÁC", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
@@ -237,7 +278,7 @@ func main() {
 
 	listsGrid := container.NewGridWithColumns(2, exactCol, suggestCol)
 
-	searchBar := container.NewBorder(nil, nil, nil, searchButton, searchEntry)
+	searchBar := container.NewBorder(nil, nil, nil, container.NewHBox(indexButton, searchButton), searchEntry)
 
 	content := container.NewBorder(
 		searchBar,
