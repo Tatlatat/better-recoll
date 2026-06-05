@@ -54,9 +54,22 @@ type Result struct {
 }
 
 // Engine wraps the embedder, chunk storage, and text/vector search indexes.
+// SafeEmbedder wraps model.OnnxEmbedder to serialize calls to Embed.
+type SafeEmbedder struct {
+	*model.OnnxEmbedder
+	mu sync.Mutex
+}
+
+// Embed calls model.OnnxEmbedder.Embed thread-safely.
+func (s *SafeEmbedder) Embed(texts []string) ([][]float32, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.OnnxEmbedder.Embed(texts)
+}
+
 type Engine struct {
 	mu        sync.Mutex
-	embedder  *model.OnnxEmbedder
+	embedder  *SafeEmbedder
 	reranker  *model.OnnxReranker
 	store     *store.FileStore
 	bm25      *index.BM25
@@ -130,7 +143,7 @@ func New(cfg Config) (*Engine, error) {
 	}
 
 	return &Engine{
-		embedder:  embedder,
+		embedder:  &SafeEmbedder{OnnxEmbedder: embedder},
 		reranker:  reranker,
 		store:     st,
 		bm25:      bm25,
@@ -185,8 +198,6 @@ func (e *Engine) Index(dir string) error {
 // IndexThrottled walks the directory recursively, collects supported files,
 // and indexes them in throttled batches to prevent CPU overheating.
 func (e *Engine) IndexThrottled(dir string, opts IndexOptions) error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
 	return e.indexThrottled(dir, opts)
 }
 
@@ -268,10 +279,10 @@ func (e *Engine) indexThrottled(dir string, opts IndexOptions) error {
 
 	if len(pending) == 0 {
 		// Record the indexed directory even if empty
-		if err := e.store.AddIndexedDir(dir); err != nil {
-			return err
-		}
-		return nil
+		e.mu.Lock()
+		err := e.store.AddIndexedDir(dir)
+		e.mu.Unlock()
+		return err
 	}
 
 	// Finalize dedupe finder (first pass completed)
@@ -315,16 +326,14 @@ func (e *Engine) indexThrottled(dir string, opts IndexOptions) error {
 		})
 	}
 
-	var writeMu sync.Mutex
-
 	for w := 0; w < workers; w++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			for job := range jobs {
-				writeMu.Lock()
+				e.mu.Lock()
 				hasErr := workerErr != nil
-				writeMu.Unlock()
+				e.mu.Unlock()
 				if hasErr {
 					return
 				}
@@ -340,9 +349,9 @@ func (e *Engine) indexThrottled(dir string, opts IndexOptions) error {
 					return
 				}
 
-				writeMu.Lock()
+				e.mu.Lock()
 				if workerErr != nil {
-					writeMu.Unlock()
+					e.mu.Unlock()
 					return
 				}
 
@@ -364,7 +373,7 @@ func (e *Engine) indexThrottled(dir string, opts IndexOptions) error {
 
 				if err := e.store.Write(storeChunks); err != nil {
 					setWorkerErr(fmt.Errorf("failed to write chunks to store: %w", err))
-					writeMu.Unlock()
+					e.mu.Unlock()
 					return
 				}
 
@@ -374,7 +383,7 @@ func (e *Engine) indexThrottled(dir string, opts IndexOptions) error {
 						e.vindex.Add(sc.ID, sc.Vector)
 					}
 				}
-				writeMu.Unlock()
+				e.mu.Unlock()
 
 				if opts.PauseBetweenBatches > 0 {
 					time.Sleep(opts.PauseBetweenBatches)
@@ -387,6 +396,9 @@ func (e *Engine) indexThrottled(dir string, opts IndexOptions) error {
 	if workerErr != nil {
 		return workerErr
 	}
+
+	e.mu.Lock()
+	defer e.mu.Unlock()
 
 	// Finalize BM25 IDF parameters
 	e.bm25.Build()
@@ -510,9 +522,9 @@ func (e *Engine) reset() error {
 // ReindexAll clears all indexes and re-indexes the specified directories cleanly.
 func (e *Engine) ReindexAll(dirs []string, opts IndexOptions) error {
 	e.mu.Lock()
-	defer e.mu.Unlock()
-
-	if err := e.reset(); err != nil {
+	err := e.reset()
+	e.mu.Unlock()
+	if err != nil {
 		return err
 	}
 	for _, dir := range dirs {
