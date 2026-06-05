@@ -546,14 +546,23 @@ const htmlContent = `<!DOCTYPE html>
             <div class="nav-links">
                 <button id="nav-search-btn" class="nav-link active" onclick="showView('search')">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-                    Tìm Kiếm
+                    Tìm kiếm
                 </button>
                 <button id="nav-setting-btn" class="nav-link" onclick="showView('setting')">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-                    Thiết Lập
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l-.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                    Cài đặt
                 </button>
             </div>
         </nav>
+
+        <!-- Setup Warning Banner (Visible on both views if missing) -->
+        <div id="setup-banner" class="setup-banner">
+            <div class="setup-text">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                <span id="setup-banner-msg">Chưa có model AI — cần tải (khoảng 4GB).</span>
+            </div>
+            <button id="setup-btn" class="setup-btn" onclick="startSetup()">Tải ngay</button>
+        </div>
 
         <!-- Global Indexing Indicator -->
         <div id="indexing-indicator" class="indexing-indicator" style="display:none">
@@ -563,14 +572,6 @@ const htmlContent = `<!DOCTYPE html>
 
         <!-- VIEW 1: SEARCH VIEW -->
         <div class="view" id="search-view">
-            <!-- Setup Warning Banner -->
-            <div id="setup-banner" class="setup-banner">
-                <div class="setup-text">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-                    <span id="setup-banner-msg">Chưa có model AI. Lập chỉ mục & tìm kiếm sẽ không hoạt động.</span>
-                </div>
-                <button id="setup-btn" class="setup-btn" onclick="startSetup()">Tải Ngay</button>
-            </div>
 
             <header>
                 <h1>SFS Search</h1>
@@ -632,7 +633,7 @@ const htmlContent = `<!DOCTYPE html>
                 <div class="column-header">
                     <div class="column-title" style="color: var(--primary)">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l-.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-                        LẬP CHỈ MỤC THƯ MỤC
+                        Lập chỉ mục thư mục
                     </div>
                 </div>
                 
@@ -653,7 +654,7 @@ const htmlContent = `<!DOCTYPE html>
                 <div class="column-header">
                     <div class="column-title" style="color: var(--suggest-color)">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
-                        THƯ MỤC ĐÃ LẬP CHỈ MỤC
+                        Thư mục đã lập chỉ mục
                     </div>
                 </div>
                 
@@ -958,13 +959,13 @@ const htmlContent = `<!DOCTYPE html>
                         wasDownloading = true;
                     } else if (status.error) {
                         bannerMsg.textContent = 'Lỗi tải: ' + status.error;
-                        setupBtn.textContent = 'Thử Lại';
+                        setupBtn.textContent = 'Thử lại';
                         setupBtn.style.display = 'inline-block';
                         setupBtn.disabled = false;
                         wasDownloading = false;
                     } else {
-                        bannerMsg.textContent = 'Chưa có model AI. Lập chỉ mục & tìm kiếm sẽ không hoạt động.';
-                        setupBtn.textContent = 'Tải Ngay';
+                        bannerMsg.textContent = 'Chưa có model AI — cần tải (khoảng 4GB).';
+                        setupBtn.textContent = 'Tải ngay';
                         setupBtn.style.display = 'inline-block';
                         setupBtn.disabled = false;
                         wasDownloading = false;
@@ -998,8 +999,7 @@ const htmlContent = `<!DOCTYPE html>
 
                 if (status.indexing) {
                     indicator.style.display = 'flex';
-                    const phaseText = status.phase === 'fast' ? 'nhanh' : 'nền';
-                    const msg = 'Đang lập chỉ mục (' + phaseText + ') "' + status.currentDir + '"... (' + status.filesIndexed + ' file)';
+                    const msg = 'Đang lập chỉ mục: ' + status.currentDir + ' (' + status.filesIndexed + ' file)...';
                     indicatorText.textContent = msg;
 
                     if (indexStatusDiv) {
@@ -1009,20 +1009,24 @@ const htmlContent = `<!DOCTYPE html>
                     }
                     if (indexBtn) {
                         indexBtn.disabled = true;
+                        indexBtn.style.opacity = '0.5';
                     }
                 } else {
                     indicator.style.display = 'none';
-                    if (indexStatusDiv && indexStatusDiv.style.display === 'block' && indexStatusDiv.textContent.includes('Đang lập chỉ mục')) {
-                        indexStatusDiv.textContent = 'Đã hoàn thành lập chỉ mục!';
+                    if (indexStatusDiv && indexStatusDiv.style.display === 'block' && indexStatusDiv.textContent.includes('Đang lập chỉ mục:')) {
+                        const lastDir = indexStatusDiv.textContent.match(/Đang lập chỉ mục:\s*(.+?)\s*\(/);
+                        const folderPath = (lastDir && lastDir[1]) || chosenPathStr || 'thư mục';
+                        indexStatusDiv.textContent = 'Xong! Đã lập chỉ mục ' + folderPath;
                         indexStatusDiv.style.color = 'var(--exact-color)';
                         setTimeout(() => {
-                            if (indexStatusDiv.textContent === 'Đã hoàn thành lập chỉ mục!') {
+                            if (indexStatusDiv.textContent.startsWith('Xong!')) {
                                 indexStatusDiv.style.display = 'none';
                             }
-                        }, 5000);
+                        }, 8000);
                     }
-                    if (indexBtn && chosenPathStr) {
-                        indexBtn.disabled = false;
+                    if (indexBtn) {
+                        indexBtn.disabled = !chosenPathStr;
+                        indexBtn.style.opacity = chosenPathStr ? '1' : '0.5';
                     }
                 }
             } catch (err) {
@@ -1043,12 +1047,12 @@ const htmlContent = `<!DOCTYPE html>
                     const txt = await response.text();
                     alert('Lỗi bắt đầu setup: ' + txt);
                     setupBtn.disabled = false;
-                    setupBtn.textContent = 'Tải Ngay';
+                    setupBtn.textContent = 'Tải ngay';
                 }
             } catch (err) {
                 alert('Lỗi kết nối setup: ' + err.message);
                 setupBtn.disabled = false;
-                setupBtn.textContent = 'Tải Ngay';
+                setupBtn.textContent = 'Tải ngay';
             }
         }
 

@@ -187,6 +187,10 @@ func (e *Engine) Index(dir string) error {
 func (e *Engine) IndexThrottled(dir string, opts IndexOptions) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	return e.indexThrottled(dir, opts)
+}
+
+func (e *Engine) indexThrottled(dir string, opts IndexOptions) error {
 
 	var pending []pendingChunk
 	skipped := 0
@@ -263,6 +267,10 @@ func (e *Engine) IndexThrottled(dir string, opts IndexOptions) error {
 	}
 
 	if len(pending) == 0 {
+		// Record the indexed directory even if empty
+		if err := e.store.AddIndexedDir(dir); err != nil {
+			return err
+		}
 		return nil
 	}
 
@@ -383,6 +391,11 @@ func (e *Engine) IndexThrottled(dir string, opts IndexOptions) error {
 	// Finalize BM25 IDF parameters
 	e.bm25.Build()
 
+	// Record the indexed directory
+	if err := e.store.AddIndexedDir(dir); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -472,4 +485,47 @@ func (e *Engine) Close() error {
 		return errs[0]
 	}
 	return nil
+}
+
+// Reset clears the in-memory BM25, Vector index, and the store (deleting all chunks),
+// resetting nextID to 1.
+func (e *Engine) Reset() error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.reset()
+}
+
+func (e *Engine) reset() error {
+	if err := e.store.Clear(); err != nil {
+		return fmt.Errorf("failed to clear store: %w", err)
+	}
+
+	e.bm25 = index.NewBM25()
+	e.vindex = index.NewVectorIndex(e.embedder.Dim())
+	e.nextID = 1
+
+	return nil
+}
+
+// ReindexAll clears all indexes and re-indexes the specified directories cleanly.
+func (e *Engine) ReindexAll(dirs []string, opts IndexOptions) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if err := e.reset(); err != nil {
+		return err
+	}
+	for _, dir := range dirs {
+		if err := e.indexThrottled(dir, opts); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// IndexedDirs returns the list of indexed directories.
+func (e *Engine) IndexedDirs() []string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.store.IndexedDirs()
 }

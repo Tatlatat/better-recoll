@@ -2,6 +2,7 @@ package store
 
 import (
 	"encoding/gob"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,10 +11,11 @@ import (
 
 // FileStore implements the Store interface by persisting chunks to disk.
 type FileStore struct {
-	mu      sync.RWMutex
-	dirPath string
-	chunks  []Chunk
-	index   map[int64]int // Maps Chunk ID to its index in the chunks slice
+	mu          sync.RWMutex
+	dirPath     string
+	chunks      []Chunk
+	index       map[int64]int // Maps Chunk ID to its index in the chunks slice
+	indexedDirs []string
 }
 
 // NewFileStore creates a new FileStore at the given directory path.
@@ -48,6 +50,15 @@ func NewFileStore(path string) (*FileStore, error) {
 		}
 	} else if !os.IsNotExist(err) {
 		return nil, fmt.Errorf("failed to open chunks file %q: %w", gobPath, err)
+	}
+
+	// Load indexed dirs if dirs.json exists
+	dirsPath := filepath.Join(path, "dirs.json")
+	if data, err := os.ReadFile(dirsPath); err == nil {
+		var dirs []string
+		if json.Unmarshal(data, &dirs) == nil {
+			fs.indexedDirs = dirs
+		}
 	}
 
 	return fs, nil
@@ -136,5 +147,82 @@ func (fs *FileStore) Count() int {
 // Close flushes changes to disk. Since Write already persists directly,
 // Close is a no-op that just returns nil.
 func (fs *FileStore) Close() error {
+	return nil
+}
+
+// Clear truncates/empties the persisted chunk+vector files.
+func (fs *FileStore) Clear() error {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+
+	fs.chunks = nil
+	fs.index = make(map[int64]int)
+	fs.indexedDirs = nil
+
+	// Remove dirs.json or save an empty JSON array
+	dirsPath := filepath.Join(fs.dirPath, "dirs.json")
+	_ = os.Remove(dirsPath)
+
+	return fs.save()
+}
+
+// AddIndexedDir records a directory as indexed and persists the list.
+func (fs *FileStore) AddIndexedDir(dir string) error {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+
+	for _, d := range fs.indexedDirs {
+		if d == dir {
+			return nil
+		}
+	}
+
+	fs.indexedDirs = append(fs.indexedDirs, dir)
+	return fs.saveDirs()
+}
+
+// IndexedDirs returns the list of indexed directories.
+func (fs *FileStore) IndexedDirs() []string {
+	fs.mu.RLock()
+	defer fs.mu.RUnlock()
+
+	dirs := make([]string, len(fs.indexedDirs))
+	copy(dirs, fs.indexedDirs)
+	return dirs
+}
+
+func (fs *FileStore) saveDirs() error {
+	dirsPath := filepath.Join(fs.dirPath, "dirs.json")
+	data, err := json.Marshal(fs.indexedDirs)
+	if err != nil {
+		return fmt.Errorf("failed to marshal indexed dirs: %w", err)
+	}
+
+	tmpFile, err := os.CreateTemp(fs.dirPath, "dirs.*.tmp")
+	if err != nil {
+		return fmt.Errorf("failed to create temp file for dirs: %w", err)
+	}
+	tmpName := tmpFile.Name()
+	defer func() {
+		if tmpFile != nil {
+			tmpFile.Close()
+		}
+		os.Remove(tmpName)
+	}()
+
+	if _, err := tmpFile.Write(data); err != nil {
+		return fmt.Errorf("failed to write dirs data: %w", err)
+	}
+	if err := tmpFile.Sync(); err != nil {
+		return fmt.Errorf("failed to sync dirs temp file: %w", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		return fmt.Errorf("failed to close dirs temp file: %w", err)
+	}
+	tmpFile = nil
+
+	if err := os.Rename(tmpName, dirsPath); err != nil {
+		return fmt.Errorf("failed to rename dirs temp file to %q: %w", dirsPath, err)
+	}
 	return nil
 }
