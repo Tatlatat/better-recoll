@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"math"
 	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -51,7 +52,14 @@ func TestParityWithPython(t *testing.T) {
 		t.Fatalf("mismatch: %d texts vs %d ref vectors", len(texts), len(ref))
 	}
 
-	emb, err := NewOnnxEmbedder(DefaultOnnxConfig())
+	// Test chạy với cwd = internal/model/, nên giải path tương đối từ DefaultOnnxConfig
+	// (trỏ từ repo root) sang absolute để tìm đúng model dir.
+	cfg := DefaultOnnxConfig()
+	root, _ := filepath.Abs("../..")
+	cfg.ModelPath = filepath.Join(root, cfg.ModelPath)
+	cfg.TokenizerPath = filepath.Join(root, cfg.TokenizerPath)
+
+	emb, err := NewOnnxEmbedder(cfg)
 	if err != nil {
 		t.Fatalf("NewOnnxEmbedder: %v", err)
 	}
