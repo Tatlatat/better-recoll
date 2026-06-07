@@ -13,9 +13,10 @@ func TestRegistry(t *testing.T) {
 		}
 	}
 
-	// Verify ReadFile returns error for unsupported extension
-	_, err := ReadFile("test.txt")
+	// Verify ReadFile returns error for a genuinely unsupported extension.
+	// (.txt IS supported now — it's registered by TxtReader's init.)
+	_, err := ReadFile("test.unknownext")
 	if err == nil {
-		t.Error("expected error for unsupported extension .txt, got nil")
+		t.Error("expected error for unsupported extension .unknownext, got nil")
 	}
 }

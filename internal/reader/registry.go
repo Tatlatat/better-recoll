@@ -11,6 +11,8 @@ var Registry = map[string]FileReader{
 	".pdf":  &PDFReader{},
 	".docx": &DocxReader{},
 	".xlsx": &XLSXReader{},
+	".pptx": &PptxReader{},
+	".rtf":  &RtfReader{},
 }
 
 // ReadFile picks the reader by file extension and extracts plain text from the file.
