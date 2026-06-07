@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"sfs/internal/engine"
+	"sfs/internal/intent"
 	"sfs/internal/store"
 )
 
@@ -43,6 +44,8 @@ var (
 	initialCount          int
 	currentCount          int
 	isHomeIndexingRunning bool
+
+	behaviorLog *intent.Log
 )
 
 
@@ -74,6 +77,7 @@ func handleSearch(w http.ResponseWriter, r *http.Request) {
 	type SearchResponse struct {
 		Exact   []SearchResultItem `json:"exact"`
 		Suggest []SearchResultItem `json:"suggest"`
+		Stage   string             `json:"stage"` // "fast" (thô, ~40ms) hoặc "final" (đã rerank)
 	}
 
 	q := r.URL.Query().Get("q")
@@ -82,11 +86,23 @@ func handleSearch(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(SearchResponse{
 			Exact:   []SearchResultItem{},
 			Suggest: []SearchResultItem{},
+			Stage:   "final",
 		})
 		return
 	}
 
-	results, err := eng.SearchRanked(q, 10)
+	// Stage-1 (fast=1): kết quả thô ~40ms để hiện NGAY khi đang gõ.
+	// Mặc định: kết quả tinh (rerank) <1s.
+	fast := r.URL.Query().Get("fast") == "1"
+	stage := "final"
+	var results engine.RankedResults
+	var err error
+	if fast {
+		stage = "fast"
+		results, err = eng.SearchFast(q, 10)
+	} else {
+		results, err = eng.SearchRanked(q, 10)
+	}
 	if err != nil {
 		log.Printf("Search error: %v", err)
 		w.Header().Set("Content-Type", "application/json")
@@ -119,6 +135,7 @@ func handleSearch(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(SearchResponse{
 		Exact:   exact,
 		Suggest: suggest,
+		Stage:   stage,
 	}); err != nil {
 		log.Printf("JSON encoding error: %v", err)
 	}
@@ -156,6 +173,9 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 	type IndexRequest struct {
 		Dir  string `json:"dir"`
 		Mode string `json:"mode"`
+		// OnlyExtensions: nếu có, CHỈ index các đuôi này (vd ["md","txt","pdf",
+		// "docx"] = chỉ tài liệu, bỏ code framework). Rỗng = mọi đuôi reader hỗ trợ.
+		OnlyExtensions []string `json:"onlyExtensions"`
 	}
 
 	var req IndexRequest
@@ -184,12 +204,17 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 	}
 	indexingMutex.Unlock()
 
+	onlyExt := req.OnlyExtensions
 	go func() {
 		var opts engine.IndexOptions
 		if indexMode == "fast" {
 			opts = engine.FastIndexOptions()
 		} else {
 			opts = engine.BackgroundIndexOptions()
+		}
+		// Giới hạn đuôi file nếu request yêu cầu (vd chỉ tài liệu, bỏ code).
+		if len(onlyExt) > 0 {
+			opts.OnlyExtensions = onlyExt
 		}
 
 		startCount := getStoreCount(cfg.IndexPath)
@@ -375,10 +400,10 @@ func handleSetup(w http.ResponseWriter, r *http.Request) {
 
 				stateMutex.Lock()
 				onboarded := globalState.Onboarded
-				primaryDir := globalState.PrimaryDir
 				stateMutex.Unlock()
 				if onboarded {
-					go runBackgroundHomeIndexing(eng, primaryDir)
+					// V2: chỉ refresh thư mục user đã chọn, KHÔNG nuốt home.
+					go refreshIndexedDirs(eng)
 				}
 			}
 		}
@@ -446,6 +471,9 @@ func saveState(indexPath string, state AppState) {
 	}
 }
 
+// findSafeTrees walk toàn home tìm thư mục "an toàn". CHỈ còn được dùng bởi
+// runBackgroundHomeIndexing (đã NGỪNG gọi tự động — xem V2). Giữ lại phòng khi
+// muốn tính năng "index cả home" như một lựa chọn user CHỦ ĐỘNG bật, không auto.
 func findSafeTrees(dirPath string, primaryDir string) (bool, []string) {
 	name := filepath.Base(dirPath)
 
@@ -461,7 +489,13 @@ func findSafeTrees(dirPath string, primaryDir string) (bool, []string) {
 	switch lowerName {
 	case "library", "system", "node_modules", "caches", "cache",
 		"build", "deriveddata", "checkouts", "sourcepackages",
-		"pods", "vendor", "dist", "target", "__pycache__":
+		"pods", "vendor", "dist", "target", "__pycache__",
+		"venv", ".venv", "lora_datasets", "site-packages",
+		"dist-packages", ".tox", ".mypy_cache", ".pytest_cache",
+		".gradle", ".cargo", ".rustup", ".npm":
+		return false, nil
+	}
+	if strings.HasSuffix(lowerName, ".egg-info") || strings.HasSuffix(lowerName, ".dist-info") {
 		return false, nil
 	}
 
@@ -495,6 +529,64 @@ func findSafeTrees(dirPath string, primaryDir string) (bool, []string) {
 	return false, merged
 }
 
+// refreshIndexedDirs re-quét CHỈ các thư mục user ĐÃ chọn (đã có trong store), để
+// nhặt file mới xuất hiện. KHÔNG quét toàn bộ home dir.
+//
+// Đây là sửa V2: trước đây runBackgroundHomeIndexing walk cả os.UserHomeDir()
+// (~1891 thư mục) mỗi lần khởi động → "mở máy lên là CPU chạy, tự nhiên đang
+// index". User chỉ CHỌN vài thư mục, app KHÔNG được tự suy ra "được phép nuốt cả
+// home". Per-file dedup (existing[path]) lo việc bỏ file đã index, nên re-quét
+// dir đã chọn là rẻ và đúng (chỉ file mới được embed).
+func refreshIndexedDirs(eng *engine.Engine) {
+	indexingMutex.Lock()
+	if isHomeIndexingRunning {
+		indexingMutex.Unlock()
+		return
+	}
+	isHomeIndexingRunning = true
+	indexingMutex.Unlock()
+	defer func() {
+		indexingMutex.Lock()
+		isHomeIndexingRunning = false
+		indexingMutex.Unlock()
+	}()
+
+	dirs := eng.IndexedDirs()
+	if len(dirs) == 0 {
+		log.Println("refresh: chưa có thư mục nào được chọn để index — bỏ qua (không tự nuốt home).")
+		return
+	}
+	log.Printf("refresh: cập nhật %d thư mục user đã chọn (không quét toàn home).", len(dirs))
+	for _, dir := range dirs {
+		indexingMutex.Lock()
+		for isIndexing {
+			indexingMutex.Unlock()
+			time.Sleep(2 * time.Second)
+			indexingMutex.Lock()
+		}
+		isIndexing = true
+		indexDir = dir
+		indexMode = "background"
+		cfg := globalConfig
+		startCount := getStoreCount(cfg.IndexPath)
+		initialCount = startCount
+		currentCount = startCount
+		indexingMutex.Unlock()
+
+		opts := engine.BackgroundIndexOptions()
+		if err := eng.IndexThrottled(dir, opts); err != nil {
+			log.Printf("refresh: lỗi cập nhật %s: %v", dir, err)
+		}
+
+		indexingMutex.Lock()
+		isIndexing = false
+		indexingMutex.Unlock()
+	}
+	log.Println("refresh: xong cập nhật thư mục đã chọn.")
+}
+
+// runBackgroundHomeIndexing (CŨ — KHÔNG còn gọi tự động). Walk toàn bộ home dir.
+// Giữ lại tham chiếu nhưng đã thay bằng refreshIndexedDirs ở startup (xem V2).
 func runBackgroundHomeIndexing(eng *engine.Engine, primaryDir string) {
 	indexingMutex.Lock()
 	if isHomeIndexingRunning {
@@ -554,7 +646,6 @@ func runBackgroundHomeIndexing(eng *engine.Engine, primaryDir string) {
 
 		log.Printf("Background indexing home subdirectory: %s", dir)
 		opts := engine.BackgroundIndexOptions()
-		opts.OnlyExtensions = []string{"pdf", "docx", "xlsx", "txt"}
 		err := eng.IndexThrottled(dir, opts)
 		if err != nil {
 			log.Printf("Error indexing subdirectory %s: %v", dir, err)
@@ -652,9 +743,11 @@ func handleOnboard(w http.ResponseWriter, r *http.Request) {
 		}
 		indexingMutex.Unlock()
 
+		// V2: KHÔNG tự lan ra quét toàn home sau khi index thư mục user chọn.
+		// User chọn thư mục nào → index đúng thư mục đó. Muốn thêm thư mục khác
+		// thì user tự chọn tiếp (handleOnboard/handleIndex). Không nuốt home.
 		if err == nil {
-			log.Println("Onboarding Fast phase completed. Starting background home indexing...")
-			runBackgroundHomeIndexing(eng, req.Dir)
+			log.Printf("Onboarding xong: đã index thư mục user chọn %s (không tự quét home).", req.Dir)
 		}
 	}()
 
@@ -662,10 +755,79 @@ func handleOnboard(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]bool{"started": true})
 }
 
+// requiredModelFile is a file that MUST exist with at least minSize bytes for the
+// model to be usable. minSize guards against the classic failure: a download cut
+// off mid-stream leaving a 0-byte / truncated file at the destination (the cause
+// of "model.onnx_data = 0MB" + "failed to load tokenizer" on startup).
+type requiredModelFile struct {
+	relPath string // relative to ModelRoot
+	minSize int64  // bytes; a sane lower bound, not the exact size
+}
+
+// requiredModelFiles is the single source of truth for "is the model complete".
+// Sizes are conservative lower bounds (real files are larger) so a truncated
+// download is caught without hard-coding exact byte counts.
+var requiredModelFiles = []requiredModelFile{
+	{"models/onnx/bge-m3/model.onnx", 100 * 1024},                  // ~725KB graph
+	{"models/onnx/bge-m3/model.onnx_data", 2_000_000_000},          // ~2.3GB weights
+	{"models/onnx/bge-m3/tokenizer.json", 1_000_000},               // ~17MB
+	{"models/onnx/bge-m3/sentencepiece.bpe.model", 1_000_000},      // ~5MB
+	{"models/onnx/bge-m3/config.json", 100},                        // ~687B
+	{"models/onnx/bge-reranker/tokenizer.json", 1_000_000},         // ~17MB
+}
+
+// verifyModelIntegrity returns the list of required files that are missing or
+// truncated under root. Empty slice = model is complete and usable. This is what
+// "khách mở máy lên chạy OK" depends on: catch a half-broken ~/.sfs BEFORE the
+// engine tries to load it and fails with a cryptic error.
+func verifyModelIntegrity(root string) []string {
+	var bad []string
+	for _, rf := range requiredModelFiles {
+		p := filepath.Join(root, rf.relPath)
+		info, err := os.Stat(p)
+		if err != nil {
+			bad = append(bad, rf.relPath+" (thiếu)")
+			continue
+		}
+		if info.Size() < rf.minSize {
+			bad = append(bad, fmt.Sprintf("%s (cụt: %d < %d bytes)", rf.relPath, info.Size(), rf.minSize))
+		}
+	}
+	return bad
+}
+
+// checkModelExists now requires ALL critical files present and non-truncated,
+// not just model.onnx. A reranker int8 (model_int8.onnx) is optional; the engine
+// falls back to FP32. The base files above are mandatory.
 func checkModelExists(cfg engine.Config) bool {
-	modelPath := filepath.Join(cfg.ModelRoot, "models", "onnx", "bge-m3", "model.onnx")
-	_, err := os.Stat(modelPath)
-	return err == nil
+	return len(verifyModelIntegrity(cfg.ModelRoot)) == 0
+}
+
+// cleanCorruptModelFiles xóa các file model CỤT (kích thước < ngưỡng) và mọi file
+// .part còn sót. Lý do: nếu để file cụt ở đích, lần setup sau có thể "thấy file
+// tồn tại" rồi bỏ qua → hỏng vĩnh viễn. Dọn đi để setup tải lại SẠCH. KHÔNG tự
+// tải (không tốn băng thông sau lưng user) — chỉ dọn + để app báo cần setup.
+// Trả số file đã dọn.
+func cleanCorruptModelFiles(root string) int {
+	cleaned := 0
+	for _, rf := range requiredModelFiles {
+		p := filepath.Join(root, rf.relPath)
+		info, err := os.Stat(p)
+		if err != nil {
+			continue // thiếu hẳn — không có gì để dọn
+		}
+		if info.Size() < rf.minSize {
+			if os.Remove(p) == nil {
+				log.Printf("setup: đã dọn file cụt %s (%d bytes)", rf.relPath, info.Size())
+				cleaned++
+			}
+		}
+		// dọn luôn .part dở nếu có
+		if os.Remove(p + ".part") == nil {
+			cleaned++
+		}
+	}
+	return cleaned
 }
 
 func getRemoteSize(url string) int64 {
@@ -684,6 +846,10 @@ func getRemoteSize(url string) int64 {
 	return 0
 }
 
+// downloadFile tải ATOMIC: ghi vào <dest>.part, kiểm đủ byte so với
+// Content-Length, RỒI mới rename sang dest. Nếu mạng đứt giữa chừng, chỉ có file
+// .part dở (sẽ ghi đè lần sau), KHÔNG bao giờ để file cụt ở đích. Đây là sửa
+// gốc rễ của lỗi "~/.sfs/model.onnx_data = 0MB / tokenizer.json thiếu".
 func downloadFile(url string, destPath string, onWrite func(n int)) error {
 	resp, err := http.Get(url)
 	if err != nil {
@@ -694,29 +860,51 @@ func downloadFile(url string, destPath string, onWrite func(n int)) error {
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("HTTP status error: %s", resp.Status)
 	}
+	expected := resp.ContentLength // -1 nếu server không báo
 
-	out, err := os.Create(destPath)
+	partPath := destPath + ".part"
+	out, err := os.Create(partPath)
 	if err != nil {
 		return err
 	}
-	defer out.Close()
 
+	var written int64
 	buf := make([]byte, 32*1024)
 	for {
 		n, readErr := resp.Body.Read(buf)
 		if n > 0 {
-			_, writeErr := out.Write(buf[:n])
-			if writeErr != nil {
+			if _, writeErr := out.Write(buf[:n]); writeErr != nil {
+				out.Close()
+				os.Remove(partPath)
 				return writeErr
 			}
+			written += int64(n)
 			onWrite(n)
 		}
 		if readErr == io.EOF {
 			break
 		}
 		if readErr != nil {
+			out.Close()
+			os.Remove(partPath)
 			return readErr
 		}
+	}
+	if err := out.Close(); err != nil {
+		os.Remove(partPath)
+		return err
+	}
+
+	// Verify: đủ byte như server hứa? (bắt trường hợp kết nối đóng sớm.)
+	if expected > 0 && written != expected {
+		os.Remove(partPath)
+		return fmt.Errorf("tải thiếu %s: nhận %d/%d bytes (mạng đứt giữa chừng)", filepath.Base(destPath), written, expected)
+	}
+
+	// Atomic: đổi tên file hoàn chỉnh sang đích. Đích không bao giờ ở trạng thái dở.
+	if err := os.Rename(partPath, destPath); err != nil {
+		os.Remove(partPath)
+		return err
 	}
 	return nil
 }
@@ -836,6 +1024,12 @@ func downloadAndSetupModels(cfg engine.Config) error {
 		}
 	}
 
+	// Verify cuối: sau khi tải, model PHẢI đủ + đúng kích thước. Nếu không (mạng
+	// chập chờn để lại file cụt), báo lỗi RÕ thay vì để app load fail sau này.
+	if bad := verifyModelIntegrity(root); len(bad) > 0 {
+		return fmt.Errorf("tải model xong nhưng KHÔNG toàn vẹn, các file lỗi: %s — hãy chạy setup lại", strings.Join(bad, "; "))
+	}
+	log.Printf("setup: model toàn vẹn, đã kiểm %d file bắt buộc", len(requiredModelFiles))
 	return nil
 }
 
@@ -863,16 +1057,37 @@ func (s *Server) Shutdown() {
 	engineMutex.Unlock()
 }
 
+// handleEvent nhận 1 event hành vi từ frontend và ghi vào behavior log (local).
+// Im lặng nuốt lỗi ghi (không để hỏng UX vì log) nhưng trả 200 nếu nhận hợp lệ.
+func handleEvent(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var e intent.Event
+	if err := json.NewDecoder(r.Body).Decode(&e); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+	if e.Time.IsZero() {
+		e.Time = time.Now()
+	}
+	if behaviorLog != nil {
+		_ = behaviorLog.Append(e) // lỗi ghi không làm hỏng UX
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
 // Start starts the HTTP server on localhost:port and returns the Server helper.
 // It automatically initializes the engine if model files exist, and runs in background.
 func Start(cfg engine.Config, port string) (*Server, error) {
 	globalConfig = cfg
+	behaviorLog = intent.NewLog(cfg.IndexPath)
 
 	// Load state at startup
 	stateMutex.Lock()
 	globalState = loadState(cfg.IndexPath)
 	onboarded := globalState.Onboarded
-	primaryDir := globalState.PrimaryDir
 	stateMutex.Unlock()
 
 	// Setup Engine if model files already exist
@@ -885,13 +1100,24 @@ func Start(cfg engine.Config, port string) (*Server, error) {
 			globalEngine = eng
 			log.Printf("Engine successfully initialized.")
 
-			// AUTOMATICALLY resume background home indexing if onboarded
+			// V2: lúc khởi động chỉ REFRESH các thư mục user đã chọn (nhặt file
+			// mới), KHÔNG quét toàn bộ home dir. "Mở máy lên" nhẹ, không giật.
 			if onboarded {
-				go runBackgroundHomeIndexing(eng, primaryDir)
+				go refreshIndexedDirs(eng)
 			}
 		}
 	} else {
-		log.Printf("WARNING: AI Models missing from %s. Engine will remain uninitialized until setup is run.", cfg.ModelRoot)
+		// Báo RÕ cái gì hỏng (thiếu file nào / cụt bao nhiêu) thay vì "missing"
+		// mơ hồ rồi để engine load fail với lỗi khó hiểu. Đây là cốt lõi của
+		// "khách mở máy lên thì biết ngay tình trạng".
+		bad := verifyModelIntegrity(cfg.ModelRoot)
+		log.Printf("WARNING: Model chưa sẵn sàng tại %s. Các file thiếu/hỏng: %s",
+			cfg.ModelRoot, strings.Join(bad, "; "))
+		// Tự DỌN file cụt/dở (không tự tải) để lần setup sau tải lại sạch, không
+		// bị skip nhầm vì "file đã tồn tại". App vẫn báo user cần chạy setup.
+		if n := cleanCorruptModelFiles(cfg.ModelRoot); n > 0 {
+			log.Printf("setup: đã dọn %d file model hỏng — hãy chạy setup để tải lại model sạch.", n)
+		}
 	}
 
 	mux := http.NewServeMux()
@@ -918,6 +1144,7 @@ func Start(cfg engine.Config, port string) (*Server, error) {
 	mux.HandleFunc("/api/status", handleStatus)
 	mux.HandleFunc("/api/folders", handleFolders)
 	mux.HandleFunc("/api/onboard", handleOnboard)
+	mux.HandleFunc("/api/event", handleEvent)
 
 	server := &http.Server{
 		Addr:    "localhost:" + port,

@@ -151,7 +151,15 @@ func main() {
 		for range hk.Keydown() {
 			log.Printf("hotkey pressed → toggle floating bar")
 			w.Dispatch(func() {
-				if currentView == "settings" {
+				// Toggle dựa trên trạng thái THẬT của cửa sổ (visible + focused),
+				// KHÔNG dùng cờ isBarVisible — cờ đó lệch khi click ra ngoài làm
+				// cửa sổ mất focus mà không ai cập nhật, khiến lần bấm đầu lại "ẩn"
+				// một cửa sổ vốn đã khuất → cảm giác "hotkey không ăn".
+				if windowVisible(w.Window()) && currentView != "settings" {
+					hideWindow(w.Window())
+					isBarVisible = false
+				} else {
+					// Luôn HIỆN + focus (đúng kiểu Spotlight: bấm là bật lên).
 					currentView = "search"
 					makeFloating(w.Window())
 					w.Navigate("http://localhost:" + port)
@@ -159,18 +167,6 @@ func main() {
 					showWindow(w.Window())
 					bringToFront()
 					isBarVisible = true
-				} else {
-					if isBarVisible {
-						hideWindow(w.Window())
-						isBarVisible = false
-					} else {
-						makeFloating(w.Window())
-						w.Navigate("http://localhost:" + port)
-						w.Eval("showView('search')")
-						showWindow(w.Window())
-						bringToFront()
-						isBarVisible = true
-					}
 				}
 			})
 		}

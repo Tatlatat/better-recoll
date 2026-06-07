@@ -38,8 +38,16 @@ func TestStressUnicodePaths(t *testing.T) {
 
 // File rất lớn (text nhiều MB) — không OOM/treo.
 func TestStressLargeFile(t *testing.T) {
+	// Embedding is ~0.5s/chunk on CPU; the full 5000-repeat file is ~1160 chunks
+	// (~8 min). That's a real soak test, not a quick check — run it only in the
+	// full suite. In -short, use a smaller (still multi-chunk) file so the path is
+	// still exercised fast.
+	reps := 5000
+	if testing.Short() {
+		reps = 60 // ~7KB, a handful of chunks — exercises large-file path quickly
+	}
 	eng, dir := newTestEngine(t)
-	big := strings.Repeat("Đây là một đoạn văn bản tiếng Việt rất dài về công trình xây dựng và nghiệm thu vật tư. ", 5000) // ~450KB
+	big := strings.Repeat("Đây là một đoạn văn bản tiếng Việt rất dài về công trình xây dựng và nghiệm thu vật tư. ", reps)
 	os.WriteFile(filepath.Join(dir, "big.txt"), []byte(big), 0644)
 	os.WriteFile(filepath.Join(dir, "small.txt"), []byte("báo giá vật tư"), 0644)
 	if err := eng.Index(dir); err != nil {
