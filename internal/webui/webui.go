@@ -1057,6 +1057,36 @@ func (s *Server) Shutdown() {
 	engineMutex.Unlock()
 }
 
+// handlePredict trả top-5 file dự đoán cho ô search trống (khoảnh khắc "wow").
+func handlePredict(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	engineMutex.RLock()
+	eng := globalEngine
+	engineMutex.RUnlock()
+	if eng == nil || behaviorLog == nil {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode([]intent.Prediction{})
+		return
+	}
+
+	events, _ := behaviorLog.Load()
+	now := time.Now()
+	prof := intent.BuildProfileWithEmbed(events, now, eng.EmbedQuery)
+
+	entries := eng.FileEntries()
+	cands := make([]intent.FileCandidate, 0, len(entries))
+	for _, fe := range entries {
+		cands = append(cands, intent.FileCandidate{Path: fe.Path, Vector: fe.Vector, ModTime: fe.ModTime})
+	}
+
+	preds := intent.Predict(cands, prof, now, 5)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(preds)
+}
+
 // handleEvent nhận 1 event hành vi từ frontend và ghi vào behavior log (local).
 // Im lặng nuốt lỗi ghi (không để hỏng UX vì log) nhưng trả 200 nếu nhận hợp lệ.
 func handleEvent(w http.ResponseWriter, r *http.Request) {
@@ -1145,6 +1175,7 @@ func Start(cfg engine.Config, port string) (*Server, error) {
 	mux.HandleFunc("/api/folders", handleFolders)
 	mux.HandleFunc("/api/onboard", handleOnboard)
 	mux.HandleFunc("/api/event", handleEvent)
+	mux.HandleFunc("/api/predict", handlePredict)
 
 	server := &http.Server{
 		Addr:    "localhost:" + port,

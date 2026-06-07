@@ -324,3 +324,50 @@ func (fs *FileStore) saveDirs() error {
 	}
 	return nil
 }
+
+// FileEntry là một FILE (gom từ nhiều chunk): vector trung bình của các chunk +
+// mtime mới nhất. Dùng cho predictor (xếp hạng theo file, không theo chunk).
+type FileEntry struct {
+	Path    string
+	Vector  []float32 // trung bình L2-chưa-chuẩn-hoá của các chunk vector
+	ModTime int64     // mtime lớn nhất trong các chunk của file
+}
+
+// FileEntries gom các chunk thành danh sách file duy nhất. Vector mỗi file =
+// trung bình vector các chunk (đại diện ngữ nghĩa toàn file). ModTime = max.
+func (fs *FileStore) FileEntries() []FileEntry {
+	fs.mu.RLock()
+	defer fs.mu.RUnlock()
+
+	type acc struct {
+		sum     []float32
+		n       int
+		modTime int64
+	}
+	byPath := make(map[string]*acc)
+	for _, c := range fs.chunks {
+		a := byPath[c.FilePath]
+		if a == nil {
+			a = &acc{sum: make([]float32, len(c.Vector))}
+			byPath[c.FilePath] = a
+		}
+		for i := range c.Vector {
+			if i < len(a.sum) {
+				a.sum[i] += c.Vector[i]
+			}
+		}
+		a.n++
+		if c.ModTime > a.modTime {
+			a.modTime = c.ModTime
+		}
+	}
+	out := make([]FileEntry, 0, len(byPath))
+	for path, a := range byPath {
+		vec := make([]float32, len(a.sum))
+		for i := range a.sum {
+			vec[i] = a.sum[i] / float32(a.n)
+		}
+		out = append(out, FileEntry{Path: path, Vector: vec, ModTime: a.modTime})
+	}
+	return out
+}

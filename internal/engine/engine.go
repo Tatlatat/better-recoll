@@ -773,3 +773,17 @@ func (e *Engine) IndexedDirs() []string {
 	defer e.mu.Unlock()
 	return e.store.IndexedDirs()
 }
+
+// FileEntries trả danh sách file đã index (cho predictor).
+func (e *Engine) FileEntries() []store.FileEntry {
+	return e.store.FileEntries()
+}
+
+// EmbedQuery embed 1 query thành vector (cho interest vector). Lỗi → nil.
+func (e *Engine) EmbedQuery(q string) []float32 {
+	vecs, err := e.embedder.Embed([]string{q})
+	if err != nil || len(vecs) == 0 {
+		return nil
+	}
+	return vecs[0]
+}

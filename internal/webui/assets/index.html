@@ -304,6 +304,7 @@
         }
         // Bắn app_open ngay khi trang load (user mở app).
         sendEvent({ type: 'app_open' });
+        loadSuggestions();
 
         const searchInput = document.getElementById('search-input');
         const loader = document.getElementById('search-loader');
@@ -544,13 +545,42 @@
             adjustWindowSize();
         }
 
+        // Tải + hiện gợi ý chủ động khi ô search trống ("mở app là thấy file cần").
+        async function loadSuggestions() {
+            try {
+                const r = await fetch('/api/predict');
+                const preds = await r.json();
+                renderSuggestions(preds);
+            } catch (e) { /* im lặng nếu lỗi */ }
+        }
+
+        function renderSuggestions(preds) {
+            const emptyState = document.getElementById('empty-state');
+            if (!preds || preds.length === 0) {
+                emptyState.innerHTML = '<span class="text-sm opacity-75">Nhập từ khóa để tìm tài liệu</span>';
+                return;
+            }
+            const items = preds.map((p, i) => {
+                const name = p.path.split(/[/\\]/).pop()
+                    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+                const safePath = p.path
+                    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+                const reason = (p.reason || '')
+                    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                return `<div data-suggest-path="${safePath}" data-suggest-rank="${i + 1}" class="flex items-center gap-2 p-2 rounded hover:bg-base-200 cursor-pointer">
+                    <span class="font-medium truncate">${name}</span>
+                    <span class="text-xs opacity-60">${reason}</span>
+                </div>`;
+            }).join('');
+            emptyState.innerHTML = `<div class="text-xs font-semibold opacity-50 mb-1 px-2">GỢI Ý CHO BẠN</div>${items}`;
+        }
+
         function updateEmptyState(query) {
             const emptyState = document.getElementById('empty-state');
             
             if (!query) {
-                emptyState.innerHTML = `
-                    <span class="text-sm opacity-75">Nhập từ khóa để tìm tài liệu</span>
-                `;
+                loadSuggestions();
+                return;
             } else {
                 emptyState.innerHTML = `
                     <span class="text-sm opacity-75">Không tìm thấy kết quả</span>
@@ -561,6 +591,21 @@
 
         // Bắt click trên mọi card kết quả → ghi event 'open' (file user thật sự mở).
         document.addEventListener('click', function (e) {
+            const sug = e.target.closest('[data-suggest-path]');
+            if (sug) {
+                sendEvent({
+                    type: 'suggestion_click',
+                    path: sug.getAttribute('data-suggest-path'),
+                    rank: parseInt(sug.getAttribute('data-suggest-rank') || '0', 10)
+                });
+                // mở chi tiết file: điền tên vào ô search để user thấy ngay
+                const input = document.getElementById('search-input');
+                if (input) {
+                    input.value = sug.getAttribute('data-suggest-path').split(/[/\\]/).pop();
+                    input.dispatchEvent(new Event('input'));
+                }
+            }
+
             const card = e.target.closest('[data-filepath]');
             if (card) {
                 sendEvent({

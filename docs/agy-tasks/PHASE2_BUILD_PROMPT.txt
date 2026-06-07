@@ -1,0 +1,34 @@
+Bạn là kỹ sư Go. Thực thi TOÀN BỘ kế hoạch trong file:
+docs/superpowers/plans/2026-06-07-intent-phase2-predictor.md
+
+Đây là Giai đoạn 2 của "Intent Engine" — PREDICTOR: khi user mở app (ô search trống),
+hiện top-5 file họ có khả năng cần (cosine + recency + frequency, toán thuần).
+ĐỌC HẾT kế hoạch + tham khảo công thức trong docs/agy-tasks/SCORING_DESIGN.md, rồi
+làm LẦN LƯỢT Task 1 → Task 6.
+
+QUY TẮC TUYỆT ĐỐI:
+1. Làm ĐÚNG theo kế hoạch — code cụ thể, file path cụ thể, lệnh test cụ thể đã có
+   sẵn. KHÔNG tự sáng tạo khác. KHÔNG bỏ task. Làm tuần tự, KHÔNG dừng giữa chừng:
+   xong task này làm task tiếp NGAY cho tới hết Task 6.
+2. TDD: viết test trước → chạy thấy FAIL → viết code → chạy thấy PASS. Đúng thứ tự.
+3. KHÔNG chạy `git commit`. Chỉ viết code + chạy test. (Người review commit sau.)
+4. TRƯỚC MỌI lệnh go, chạy (path có khoảng trắng làm clang vỡ):
+   export CGO_LDFLAGS="-L$TMPDIR/sfs-libs"; ln -sfn "/Users/tatlatat/Documents/level 3/libs" "$TMPDIR/sfs-libs"
+5. RÀNG BUỘC THIẾT KẾ: 100% LOCAL, TOÁN THUẦN (không LLM, không ML lib). Công thức
+   theo SCORING_DESIGN: recency exp-decay half-life 24h, interest vector decay 2h,
+   frequency BM25-saturation count/(count+5), trọng số CỐ ĐỊNH wCos=0.20 wRec=0.60
+   wFreq=0.20. GĐ2 chỉ làm cosine+recency+frequency (BỎ time-profile Gaussian +
+   feedback Passive-Aggressive — để GĐ3/4).
+6. CHỈ sửa file trong phạm vi kế hoạch: store/file_store.go (+FileEntries),
+   intent/profile.go, intent/predictor.go (+test), webui/webui.go (+handlePredict),
+   engine/engine.go (+FileEntries/EmbedQuery method), webui/assets/index.html.
+7. KIỂM CHỮ KÝ THẬT trước khi gọi: kế hoạch có vài chỗ ghi "kiểm chữ ký thật" (vd
+   fs.Add nhận gì, engine đã có method chưa). Grep code thật rồi gọi đúng, đừng đoán.
+
+KHI XONG TẤT CẢ (Task 6):
+- export CGO_LDFLAGS="-L$TMPDIR/sfs-libs"; ln -sfn "/Users/tatlatat/Documents/level 3/libs" "$TMPDIR/sfs-libs"
+- go build ./... 2>&1 | grep -v "duplicate librar" | grep -iE "error|cannot" || echo BUILD_OK
+- go test ./internal/intent/ ./internal/store/ ./internal/webui/ -short 2>&1 | grep -v "duplicate librar" | grep -E "ok|FAIL"
+- Báo: đã làm task nào, test nào PASS, có vướng gì.
+
+Bắt đầu: đọc kế hoạch + SCORING_DESIGN, tóm tắt 6 task, rồi thực thi liên tục tới hết.
