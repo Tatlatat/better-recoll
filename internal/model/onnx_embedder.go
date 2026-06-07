@@ -13,6 +13,11 @@ import (
 type OnnxConfig struct {
 	ModelPath     string
 	TokenizerPath string
+	// IntraOpThreads giới hạn số thread ONNX dùng cho MỖI forward pass. 0 = mặc
+	// định (ONNX tự dùng hết core — nhanh nhất, cho SEARCH). >0 = giới hạn (cho
+	// INDEX nền: không ngốn cả máy). Đây là cách kiểm soát "background index mát"
+	// — throttle ở tầng Go (Workers/Pause) KHÔNG kiểm được intra-op threads của ONNX.
+	IntraOpThreads int
 }
 
 func DefaultOnnxConfig() OnnxConfig {
@@ -50,12 +55,29 @@ func NewOnnxEmbedder(cfg OnnxConfig) (*OnnxEmbedder, error) {
 		return nil, fmt.Errorf("failed to load tokenizer from %s: %w", tokenizerFile, err)
 	}
 
+	// SessionOptions: giới hạn intra-op threads nếu cấu hình (cho index nền mát).
+	var sessOpts *ort.SessionOptions
+	if cfg.IntraOpThreads > 0 {
+		o, oerr := ort.NewSessionOptions()
+		if oerr != nil {
+			tokenizer.Close()
+			return nil, fmt.Errorf("failed to create session options: %w", oerr)
+		}
+		if oerr := o.SetIntraOpNumThreads(cfg.IntraOpThreads); oerr != nil {
+			o.Destroy()
+			tokenizer.Close()
+			return nil, fmt.Errorf("failed to set intra-op threads: %w", oerr)
+		}
+		sessOpts = o
+		defer sessOpts.Destroy()
+	}
+
 	// Create session (CPU — ổn định với external-data model).
 	session, err := ort.NewDynamicAdvancedSession(
 		cfg.ModelPath,
 		[]string{"input_ids", "attention_mask"},
 		[]string{"token_embeddings"},
-		nil,
+		sessOpts,
 	)
 	if err != nil {
 		tokenizer.Close()
