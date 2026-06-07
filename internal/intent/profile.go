@@ -15,6 +15,7 @@ type FileStat struct {
 type Profile struct {
 	InterestVector []float32            // tâm điểm quan tâm (trung bình có trọng số, decay)
 	FileStats      map[string]*FileStat // path -> thống kê
+	TimeProfile    map[string]map[int]int // path -> hour(0-23) -> count
 }
 
 // interestHalfLife = 2h: hành động cũ hơn nhanh chóng mất giá trị ("session mềm").
@@ -29,7 +30,10 @@ func BuildProfile(events []Event, now time.Time) Profile {
 // BuildProfileWithEmbed xây profile đầy đủ. embed(query) trả vector cho 1 search
 // query (nil = bỏ qua interest vector). Trọng số mỗi event = exp(-ln2 * age/2h).
 func BuildProfileWithEmbed(events []Event, now time.Time, embed func(string) []float32) Profile {
-	p := Profile{FileStats: make(map[string]*FileStat)}
+	p := Profile{
+		FileStats:   make(map[string]*FileStat),
+		TimeProfile: make(map[string]map[int]int),
+	}
 	lambda := math.Ln2 / interestHalfLifeHours
 
 	var sum []float32
@@ -46,6 +50,12 @@ func BuildProfileWithEmbed(events []Event, now time.Time, embed func(string) []f
 				if e.Time.After(st.LastOpened) {
 					st.LastOpened = e.Time
 				}
+				
+				hr := e.Time.Hour()
+				if p.TimeProfile[e.Path] == nil {
+					p.TimeProfile[e.Path] = make(map[int]int)
+				}
+				p.TimeProfile[e.Path][hr]++
 			}
 		case EventSearch:
 			if embed != nil && e.Query != "" {

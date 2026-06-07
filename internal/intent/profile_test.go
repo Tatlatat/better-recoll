@@ -41,3 +41,21 @@ func TestInterestVectorWeightsRecent(t *testing.T) {
 		t.Fatalf("interest phải nghiêng về 'mới': %v", p.InterestVector)
 	}
 }
+
+func TestProfile_TimeProfile(t *testing.T) {
+	now := time.Now()
+	// Create events at 9 AM
+	t9 := time.Date(now.Year(), now.Month(), now.Day(), 9, 30, 0, 0, now.Location())
+	events := []Event{
+		{Time: t9, Type: EventOpen, Path: "/a.txt"},
+		{Time: t9, Type: EventOpen, Path: "/a.txt"},
+		{Time: t9.Add(1 * time.Hour), Type: EventSuggestionClick, Path: "/b.txt"}, // 10 AM
+	}
+	p := BuildProfile(events, now)
+	if p.TimeProfile["/a.txt"][9] != 2 {
+		t.Fatalf("a.txt should have 2 opens at 9 AM, got %d", p.TimeProfile["/a.txt"][9])
+	}
+	if p.TimeProfile["/b.txt"][10] != 1 {
+		t.Fatalf("b.txt should have 1 open at 10 AM, got %d", p.TimeProfile["/b.txt"][10])
+	}
+}

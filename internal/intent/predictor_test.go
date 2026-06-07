@@ -36,3 +36,28 @@ func TestPredictCosineHelps(t *testing.T) {
 		t.Fatalf("file khớp ngữ nghĩa phải top-1, được: %+v", got)
 	}
 }
+
+func TestPredict_TimeMatch(t *testing.T) {
+	now := time.Date(2026, 6, 7, 9, 0, 0, 0, time.UTC) // Now is 9 AM
+	mt := now.Add(-200 * time.Hour).Unix() // make it very old so recency is low
+	
+	files := []FileCandidate{
+		{Path: "/time.txt", Vector: []float32{0, 0}, ModTime: mt},
+		{Path: "/other.txt", Vector: []float32{0, 0}, ModTime: mt},
+	}
+	
+	prof := Profile{
+		FileStats: map[string]*FileStat{},
+		TimeProfile: map[string]map[int]int{
+			"/time.txt": {9: 10}, // peak hour is 9
+		},
+	}
+	
+	got := Predict(files, prof, now, 2)
+	if got[0].Path != "/time.txt" {
+		t.Fatalf("file /time.txt phải top-1 do time match, được: %+v", got)
+	}
+	if got[0].Reason != "đúng nhịp làm việc giờ này" {
+		t.Errorf("reason sai, được: %s", got[0].Reason)
+	}
+}
