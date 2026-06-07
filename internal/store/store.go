@@ -11,6 +11,7 @@ type Chunk struct {
 	Offset        int    // vị trí đoạn trong file (để đọc lại đúng đoạn)
 	IsBoilerplate bool   // cờ đoạn-khung-chung (template), set bởi DedupeFinder
 	Vector        []float32
+	ModTime       int64 // Unix giây — thời điểm file sửa lần cuối (recency cho intent)
 }
 
 // Store là hợp đồng lưu trữ engine biết.

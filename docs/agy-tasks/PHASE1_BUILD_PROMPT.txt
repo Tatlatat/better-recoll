@@ -1,0 +1,31 @@
+Bạn là kỹ sư Go. Thực thi TOÀN BỘ kế hoạch trong file:
+docs/superpowers/plans/2026-06-07-intent-phase1-behavior-log.md
+
+Đây là Giai đoạn 1 của "Intent Engine" — ghi hành vi người dùng (behavior log) làm
+nền cho dự đoán. ĐỌC HẾT kế hoạch trước, rồi làm LẦN LƯỢT Task 1 → Task 7.
+
+QUY TẮC TUYỆT ĐỐI:
+1. Làm ĐÚNG theo kế hoạch — mỗi task có code cụ thể, file path cụ thể, lệnh test
+   cụ thể. KHÔNG tự sáng tạo khác đi. KHÔNG bỏ task.
+2. TDD: với task có test, VIẾT TEST TRƯỚC → chạy thấy FAIL → viết code → chạy thấy
+   PASS. Đúng thứ tự.
+3. KHÔNG chạy `git commit`. Chỉ viết code + chạy test. (Người review sẽ commit sau.)
+4. BUILD/TEST cần biến môi trường vì path dự án có khoảng trắng ("level 3") làm
+   clang CGO vỡ. TRƯỚC MỌI lệnh go, chạy:
+   export CGO_LDFLAGS="-L$TMPDIR/sfs-libs"; ln -sfn "/Users/tatlatat/Documents/level 3/libs" "$TMPDIR/sfs-libs"
+   (kế hoạch đã ghi lệnh này trong từng step — bám theo).
+5. KHÔNG đụng file ngoài phạm vi kế hoạch. Các file kế hoạch cho sửa:
+   - TẠO: internal/intent/event.go, internal/intent/log.go, internal/intent/log_test.go,
+     internal/webui/event_test.go
+   - SỬA: internal/store/store.go, internal/engine/engine.go, internal/webui/webui.go,
+     internal/webui/assets/index.html, (.gitignore nếu cần — nhưng .sfsindex/ đã có).
+6. RÀNG BUỘC THIẾT KẾ (từ kế hoạch): 100% LOCAL (events.jsonl trong .sfsindex/, không
+   gửi mạng), Chunk.ModTime là int64 Unix giây (không time.Time, để gob gọn + tương
+   thích ngược), log append-only + rotate ở 5000 event.
+
+KHI XONG TẤT CẢ:
+- Chạy: export CGO_LDFLAGS="-L$TMPDIR/sfs-libs"; ln -sfn "/Users/tatlatat/Documents/level 3/libs" "$TMPDIR/sfs-libs"; go build ./... 2>&1 | grep -v "duplicate librar" | grep -iE "error|cannot" || echo BUILD_OK
+- Chạy: go test ./internal/intent/ ./internal/webui/ ./internal/store/ -short 2>&1 | grep -v "duplicate librar" | grep -E "ok|FAIL"
+- Báo lại: đã làm task nào, test nào PASS, có vướng gì không.
+
+Bắt đầu bằng đọc kế hoạch + tóm tắt 7 task sẽ làm, rồi thực thi.

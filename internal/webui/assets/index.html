@@ -291,6 +291,20 @@
 
     <!-- Page Logic -->
     <script>
+        // Gửi event hành vi về behavior log (local, fire-and-forget — không chặn UI).
+        function sendEvent(ev) {
+            try {
+                fetch('/api/event', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(ev),
+                    keepalive: true
+                }).catch(() => {}); // lỗi mạng local không làm phiền user
+            } catch (e) {}
+        }
+        // Bắn app_open ngay khi trang load (user mở app).
+        sendEvent({ type: 'app_open' });
+
         const searchInput = document.getElementById('search-input');
         const loader = document.getElementById('search-loader');
         const exactList = document.getElementById('exact-list');
@@ -376,17 +390,32 @@
             }
         });
 
+        // --- Instant-search plumbing (như Google: hủy query cũ + cache + chỉ nhận kết quả mới nhất) ---
+        let searchSeq = 0;            // generation token: chỉ render kết quả của query MỚI NHẤT
+        let inflightController = null; // hủy request đang chạy khi gõ chữ mới
+        const resultCache = new Map(); // cache theo query (gõ thêm chữ không gọi lại)
+        const CACHE_MAX = 60;
+
         // Debounced Search Input Handler
         searchInput.addEventListener('input', () => {
             clearTimeout(debounceTimer);
             const query = searchInput.value.trim();
             if (!query) {
+                // Hủy mọi request đang chạy, dọn UI ngay
+                if (inflightController) { inflightController.abort(); inflightController = null; }
+                searchSeq++;
                 resetUI();
+                return;
+            }
+            // Cache hit: hiện ngay, không chờ mạng
+            if (resultCache.has(query)) {
+                searchSeq++;
+                renderResults(resultCache.get(query), query);
                 return;
             }
             debounceTimer = setTimeout(() => {
                 fetchResults(query);
-            }, 250);
+            }, 180);
         });
 
         function resetUI() {
@@ -400,24 +429,65 @@
             updateEmptyState('');
         }
 
+        // Tìm kiếm 2-THÌ (như Google):
+        //  THÌ 1 (fast, ~40ms): hiện kết quả thô NGAY để cảm giác "gõ tới đâu thấy tới đó".
+        //  THÌ 2 (final, <1s): reranker tinh chỉnh lại thứ tự, thay thế mượt khi xong.
+        // Cả hai dùng cùng layout nên không nhấp nháy — chỉ thứ tự/điểm cập nhật.
         async function fetchResults(query) {
+            // Hủy request trước (nếu còn chạy) — chống "gõ từng chữ nhảy lung tung".
+            if (inflightController) inflightController.abort();
+            inflightController = new AbortController();
+            const mySeq = ++searchSeq;          // dấu thời điểm của query này
+            const signal = inflightController.signal;
+
             loader.classList.add('visible');
+            let finalArrived = false;
+            let fastData = null;
+
+            // THÌ 1: kết quả thô tức thì (không chờ rerank)
+            const fastPromise = (async () => {
+                try {
+                    const resp = await fetch('/api/search?fast=1&q=' + encodeURIComponent(query), { signal });
+                    if (!resp.ok) return;
+                    const data = await resp.json();
+                    if (mySeq !== searchSeq) return;
+                    fastData = data;
+                    // Chỉ hiện thô nếu kết quả tinh CHƯA về (tránh đè kết quả tốt hơn)
+                    if (!finalArrived) renderResults(data, query);
+                } catch (_) { /* fast lỗi thì bỏ qua, đợi final */ }
+            })();
+
+            // THÌ 2: kết quả tinh (rerank)
             try {
-                const response = await fetch('/api/search?q=' + encodeURIComponent(query));
+                const response = await fetch('/api/search?q=' + encodeURIComponent(query), { signal });
                 if (!response.ok) {
                     const data = await response.json();
-                    if (data && data.error) {
-                        throw new Error(data.error);
-                    }
+                    if (data && data.error) throw new Error(data.error);
                     throw new Error('Mạng hoặc máy chủ gặp lỗi');
                 }
                 const data = await response.json();
+                if (mySeq !== searchSeq) return;
+                finalArrived = true;
+                // Nếu reranker loại hết NHƯNG thì-1 có kết quả: KHÔNG sập về "không
+                // tìm thấy" — giữ kết quả thô làm Gợi ý (không nhấp nháy 10→0).
+                const finalEmpty = (data.exact || []).length === 0 && (data.suggest || []).length === 0;
+                if (finalEmpty && fastData && (fastData.exact || []).length > 0) {
+                    data.suggest = fastData.exact;
+                    data.exact = [];
+                }
+                resultCache.set(query, data);
+                if (resultCache.size > CACHE_MAX) {
+                    resultCache.delete(resultCache.keys().next().value);
+                }
                 renderResults(data, query);
             } catch (err) {
+                if (err.name === 'AbortError') return; // bị hủy vì gõ tiếp — im lặng
+                if (mySeq !== searchSeq) return;
                 console.error(err);
                 showErrorState(err.message);
             } finally {
-                loader.classList.remove('visible');
+                await fastPromise.catch(()=>{});
+                if (mySeq === searchSeq) loader.classList.remove('visible');
             }
         }
 
@@ -489,6 +559,18 @@
             adjustWindowSize();
         }
 
+        // Bắt click trên mọi card kết quả → ghi event 'open' (file user thật sự mở).
+        document.addEventListener('click', function (e) {
+            const card = e.target.closest('[data-filepath]');
+            if (card) {
+                sendEvent({
+                    type: 'open',
+                    path: card.getAttribute('data-filepath'),
+                    fromQuery: (document.getElementById('search-input') || {}).value || ''
+                });
+            }
+        });
+
         function createCardHTML(item, index) {
             const escapedText = item.text
                 .replace(/&/g, "&amp;")
@@ -515,7 +597,7 @@
             }).replace(/'/g, "&#39;").replace(/"/g, "&quot;");
 
             return `
-            <div class="card card-compact bg-base-100 border border-base-300 hover:border-primary/50 transition-colors cursor-pointer" onclick="showDetailFromJSON(this.querySelector('.filename-link').getAttribute('data-json'))">
+            <div data-filepath="${item.filePath}" class="card card-compact bg-base-100 border border-base-300 hover:border-primary/50 transition-colors cursor-pointer" onclick="showDetailFromJSON(this.querySelector('.filename-link').getAttribute('data-json'))">
                 <div class="card-body p-4 gap-2">
                     <div class="flex flex-col gap-0.5">
                         <div class="flex justify-between items-start gap-2">
