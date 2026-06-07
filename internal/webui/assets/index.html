@@ -597,7 +597,7 @@
             }).replace(/'/g, "&#39;").replace(/"/g, "&quot;");
 
             return `
-            <div data-filepath="${item.filePath}" class="card card-compact bg-base-100 border border-base-300 hover:border-primary/50 transition-colors cursor-pointer" onclick="showDetailFromJSON(this.querySelector('.filename-link').getAttribute('data-json'))">
+            <div data-filepath="${escapedPath}" class="card card-compact bg-base-100 border border-base-300 hover:border-primary/50 transition-colors cursor-pointer" onclick="showDetailFromJSON(this.querySelector('.filename-link').getAttribute('data-json'))">
                 <div class="card-body p-4 gap-2">
                     <div class="flex flex-col gap-0.5">
                         <div class="flex justify-between items-start gap-2">
