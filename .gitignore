@@ -19,5 +19,6 @@ docs/superpowers/plans/2026-05-31-docusaurus-magic-comments-prism-order.md
 /sfs-app
 /sfs-server
 dist/
+.release-deps/
 uitest/node_modules/
 uitest/package-lock.json
