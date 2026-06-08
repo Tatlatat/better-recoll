@@ -32,7 +32,7 @@ cargo build --release --target x86_64-pc-windows-gnu -p tokenizers-ffi
 Pop-Location
 Copy-Item (Join-Path $modDir "target\x86_64-pc-windows-gnu\release\libtokenizers_ffi.a") (Join-Path $DepsDir "libtokenizers.a") -Force
 
-$env:CGO_LDFLAGS = "-L$($DepsDir -replace '\\','/')"
+$env:CGO_LDFLAGS = "-L$($DepsDir -replace '\\','/') -lntdll"
 
 $onnxZip = Join-Path $DepsDir "onnxruntime-win-x64-1.23.2.zip"
 Invoke-WebRequest "https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-win-x64-1.23.2.zip" -OutFile $onnxZip
