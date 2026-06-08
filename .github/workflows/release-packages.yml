@@ -1,0 +1,89 @@
+name: release-packages
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "preview-*"
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: macos-arm64
+            runner: macos-14
+            artifact_glob: dist/release/*.zip
+          - id: linux-amd64
+            runner: ubuntu-24.04
+            artifact_glob: dist/release/*.zip
+          - id: windows-amd64
+            runner: windows-latest
+            artifact_glob: dist\release\*.zip
+
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Set up Rust
+        if: matrix.id == 'windows-amd64'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-gnu
+
+      - name: Set up MSYS2 toolchain
+        if: matrix.id == 'windows-amd64'
+        uses: msys2/setup-msys2@v2
+        with:
+          update: true
+          install: >-
+            mingw-w64-x86_64-toolchain
+            make
+            unzip
+            zip
+
+      - name: Build release package (Unix)
+        if: matrix.id != 'windows-amd64'
+        env:
+          VERSION: ${{ github.ref_name }}
+        shell: bash
+        run: ./scripts/release/build-package.sh
+
+      - name: Build release package (Windows)
+        if: matrix.id == 'windows-amd64'
+        env:
+          VERSION: ${{ github.ref_name }}
+        shell: pwsh
+        run: .\scripts\release\build-package.ps1
+
+      - name: Upload packaged zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.id }}
+          path: ${{ matrix.artifact_glob }}
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*.zip
+          generate_release_notes: true
+          prerelease: ${{ startsWith(github.ref_name, 'preview-') }}
