@@ -15,8 +15,8 @@ import (
 )
 
 type pair struct {
-	Query        string   `json:"query"`
-	Positive     string   `json:"positive"`
+	Query         string   `json:"query"`
+	Positive      string   `json:"positive"`
 	HardNegatives []string `json:"hard_negatives"`
 }
 

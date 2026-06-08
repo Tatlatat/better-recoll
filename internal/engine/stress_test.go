@@ -59,8 +59,8 @@ func TestStressBadQueries(t *testing.T) {
 		"   ",
 		strings.Repeat("xây dựng ", 500), // siêu dài
 		"!@#$%^&*()_+{}|:<>?",
-		"日本語 中文 한국어",  // unicode khác
-		"\x00\x01",        // ký tự điều khiển
+		"日本語 中文 한국어",        // unicode khác
+		"\x00\x01",          // ký tự điều khiển
 		"café naïve résumé", // dấu latin khác
 	}
 	for _, q := range queries {

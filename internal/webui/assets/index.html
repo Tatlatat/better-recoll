@@ -1,0 +1,1057 @@
+<!DOCTYPE html>
+<html lang="vi" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Better Recoll</title>
+    <!-- Standalone DaisyUI 5 Style sheet (Prebuilt classes) -->
+    <link rel="stylesheet" href="/assets/daisyui.css">
+    <style>
+        html {
+            background: transparent !important;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+            min-height: 100vh;
+        }
+
+        /* Search mode overrides for floating spotlight search bar */
+        body.search-mode {
+            background-color: transparent !important;
+            background-image: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            overflow: hidden !important;
+            display: block !important;
+            width: 100vw !important;
+            min-height: auto !important;
+        }
+
+        body.search-mode #main-container {
+            width: 100% !important;
+            max-width: 100% !important;
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+            padding: 8px !important;
+            margin: 0 !important;
+            gap: 8px !important;
+        }
+
+        body.search-mode #top-nav {
+            display: none !important;
+        }
+
+        body.search-mode #indexing-badge {
+            display: none !important;
+        }
+
+        body.search-mode main {
+            gap: 8px !important;
+        }
+
+        /* Helper utility styles to complement DaisyUI without tailwind.js compiler */
+        .mx-auto { margin-left: auto; margin-right: auto; }
+        .max-w-640 { max-width: 640px; }
+        .max-w-sm { max-width: 24rem; }
+        .w-full { width: 100%; }
+        .flex { display: flex; }
+        .flex-col { flex-direction: column; }
+        .flex-row { flex-direction: row; }
+        .items-center { align-items: center; }
+        .justify-between { justify-content: space-between; }
+        .justify-center { justify-content: center; }
+        .gap-2 { gap: 0.5rem; }
+        .gap-3 { gap: 0.75rem; }
+        .gap-4 { gap: 1rem; }
+        .gap-6 { gap: 1.5rem; }
+        .p-4 { padding: 1rem; }
+        .p-6 { padding: 1.5rem; }
+        .py-2 { padding-top: 0.5rem; padding-bottom: 0.5rem; }
+        .py-3 { padding-top: 0.75rem; padding-bottom: 0.75rem; }
+        .py-4 { padding-top: 1rem; padding-bottom: 1rem; }
+        .py-12 { padding-top: 3rem; padding-bottom: 3rem; }
+        .px-4 { padding-left: 1rem; padding-right: 1rem; }
+        .pr-4 { padding-right: 1rem; }
+        .pr-12 { padding-right: 3rem; }
+        .mt-1 { margin-top: 0.25rem; }
+        .mt-2 { margin-top: 0.5rem; }
+        .mt-4 { margin-top: 1rem; }
+        .mb-2 { margin-bottom: 0.5rem; }
+        .hidden { display: none !important; }
+        .block { display: block; }
+        .inline-block { display: inline-block; }
+        .shrink-0 { flex-shrink: 0; }
+        .text-sm { font-size: 0.875rem; line-height: 1.25rem; }
+        .text-xs { font-size: 0.75rem; line-height: 1rem; }
+        .text-lg { font-size: 1.125rem; line-height: 1.75rem; }
+        .font-bold { font-weight: 700; }
+        .font-semibold { font-weight: 600; }
+        .font-medium { font-weight: 500; }
+        .font-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+        .uppercase { text-transform: uppercase; }
+        .tracking-wider { letter-spacing: 0.05em; }
+        .relative { position: relative; }
+        .absolute { position: absolute; }
+        .right-4 { right: 1rem; }
+        .top-1/2 { top: 50%; }
+        .-translate-y-1/2 { transform: translateY(-50%); }
+        .text-center { text-align: center; }
+        .truncate {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .line-clamp-2 {
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        .text-base-content-50 { opacity: 0.7; }
+        .text-base-content-60 { opacity: 0.75; }
+        .text-base-content-70 { opacity: 0.7; }
+        .text-base-content-85 { opacity: 0.85; }
+        
+        .modal::backdrop {
+            background-color: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(4px);
+        }
+        
+        #search-loader {
+            display: none !important;
+        }
+        #search-loader.visible {
+            display: block !important;
+        }
+    </style>
+</head>
+<body class="bg-base-200 text-base-content min-h-screen">
+
+    <div class="mx-auto max-w-640 px-4 py-8 flex flex-col gap-6" id="main-container">
+        <!-- Top Navigation Area -->
+        <header class="flex justify-between items-center w-full pb-2" id="top-nav">
+            <div class="flex items-center gap-2">
+                <h1 class="text-xs font-semibold uppercase tracking-wider text-base-content-70">better-recoll</h1>
+                <div id="indexing-badge" class="badge badge-warning badge-xs gap-1 hidden py-1.5 px-2">
+                    <span class="loading loading-spinner" style="width: 0.75rem; height: 0.75rem;"></span>
+                    <span class="font-semibold" style="font-size: 10px;">Đang lập chỉ mục...</span>
+                </div>
+            </div>
+            <button onclick="openSettings()" class="btn btn-ghost btn-sm btn-circle" title="Cài đặt" aria-label="Cài đặt">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4 text-base-content-70">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.43l-1.003.828c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.99l1.005.831a1.125 1.125 0 0 1 .26 1.43l-1.297 2.247a1.125 1.125 0 0 1-1.37.491l-1.216-.456c-.356-.133-.751-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.552 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.43l1.004-.83c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                </svg>
+            </button>
+        </header>
+
+        <!-- Search Input + Results Main Content -->
+        <main class="flex flex-col gap-6 w-full">
+            <!-- Search Input Wrapper -->
+            <div class="relative w-full">
+                <label for="search-input" class="sr-only">Tìm tài liệu</label>
+                <input type="text" id="search-input" class="input input-bordered input-lg w-full pr-12 focus:outline-none" placeholder="Tìm tài liệu..." autofocus />
+                <div id="search-loader" class="absolute right-4 top-1/2 -translate-y-1/2">
+                    <span class="loading loading-spinner loading-sm text-base-content-70"></span>
+                </div>
+            </div>
+
+        <!-- Status / AI Model Setup Banner -->
+        <div id="setup-banner" class="alert alert-warning py-3 px-4 shadow-sm text-sm font-medium hidden flex-row justify-between items-center gap-4">
+            <div class="flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5 text-warning shrink-0">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3Z" />
+                </svg>
+                <span id="setup-banner-msg">Chưa có model AI — cần tải (khoảng 4GB).</span>
+            </div>
+            <button id="setup-btn" onclick="startSetup()" class="btn btn-sm btn-primary">Tải ngay</button>
+        </div>
+
+        <!-- Results Area -->
+        <div id="results-area" class="flex flex-col gap-6">
+            <!-- Exact Match Section -->
+            <div id="exact-section" class="flex flex-col gap-2 hidden">
+                <h2 class="flex items-center gap-2 text-xs font-semibold text-base-content-85 uppercase tracking-wider">
+                    <span>Chính xác</span>
+                    <span id="exact-count" class="badge badge-sm badge-neutral">0</span>
+                </h2>
+                <div id="exact-list" class="flex flex-col gap-3"></div>
+            </div>
+
+            <!-- Suggested Match Section -->
+            <div id="suggest-section" class="flex flex-col gap-2 hidden">
+                <h2 class="flex items-center gap-2 text-xs font-semibold text-base-content-85 uppercase tracking-wider">
+                    <span>Gợi ý</span>
+                    <span id="suggest-count" class="badge badge-sm badge-neutral">0</span>
+                </h2>
+                <div id="suggest-list" class="flex flex-col gap-3"></div>
+            </div>
+
+            <!-- Empty State -->
+            <div id="empty-state" class="flex flex-col items-center justify-center py-12 text-center text-base-content-70">
+                <span id="empty-state-text">Nhập từ khóa để tìm tài liệu</span>
+            </div>
+        </main>
+    </div>
+
+    <!-- Onboarding Modal -->
+    <dialog id="onboard-modal" class="modal">
+        <div class="modal-box max-w-sm p-6 flex flex-col gap-4">
+            <h3 class="text-lg font-bold text-center">Chào mừng</h3>
+            <p class="text-sm text-base-content-70 text-center">Chọn thư mục tài liệu để bắt đầu</p>
+            <div class="flex flex-col gap-3">
+                <button id="onboard-pick-btn" onclick="triggerOnboardPicker()" class="btn btn-primary w-full">Chọn thư mục...</button>
+                <span id="onboard-path" class="text-sm text-base-content-70 truncate text-center block">Chưa chọn thư mục</span>
+                <div id="onboard-status" class="text-xs text-info font-medium hidden text-center"></div>
+                <button id="onboard-start-btn" onclick="startOnboarding()" class="btn btn-primary w-full hidden">Bắt đầu lập chỉ mục</button>
+            </div>
+        </div>
+        <form method="dialog" class="modal-backdrop">
+            <button>close</button>
+        </form>
+    </dialog>
+
+    <!-- Settings Modal -->
+    <dialog id="settings-modal" class="modal">
+        <div class="modal-box">
+            <h3 class="font-bold text-lg flex items-center justify-between">
+                <span>Cài đặt</span>
+                <form method="dialog">
+                    <button class="btn btn-sm btn-circle btn-ghost">✕</button>
+                </form>
+            </h3>
+            <div class="py-4 flex flex-col gap-4">
+                <div>
+                    <h4 class="text-xs font-semibold uppercase tracking-wider text-base-content-70 mb-2">Thư mục đã lập chỉ mục</h4>
+                    <div id="folders-list" class="flex flex-col gap-2 max-h-48 overflow-y-auto">
+                        <!-- Folders list renders here -->
+                    </div>
+                </div>
+                <div class="divider"></div>
+                <div class="flex flex-col gap-2">
+                    <h4 class="text-xs font-semibold uppercase tracking-wider text-base-content-70 mb-2">Thêm thư mục mới</h4>
+                    <div class="flex gap-2 items-center">
+                        <button onclick="triggerFolderPicker()" class="btn btn-sm btn-outline">Chọn thư mục...</button>
+                        <span id="chosen-path" class="text-xs font-mono text-base-content-70 truncate max-w-xs">Chưa chọn</span>
+                    </div>
+                    <button id="index-btn" onclick="startIndexing()" class="btn btn-sm btn-primary w-fit mt-2 hidden">Bắt đầu lập chỉ mục</button>
+                    <div id="index-status" class="text-xs mt-1 hidden"></div>
+                </div>
+            </div>
+        </div>
+        <form method="dialog" class="modal-backdrop">
+            <button>close</button>
+        </form>
+    </dialog>
+
+    <!-- Detail View Modal -->
+    <dialog id="detail-modal" class="modal">
+        <div class="modal-box max-w-2xl">
+            <h3 class="font-bold text-lg flex items-center justify-between">
+                <span id="detail-filename" class="truncate pr-4">Chi tiết tài liệu</span>
+                <form method="dialog">
+                    <button class="btn btn-sm btn-circle btn-ghost">✕</button>
+                </form>
+            </h3>
+            <div class="py-4 flex flex-col gap-4">
+                <div class="flex flex-col gap-1">
+                    <span class="text-xs font-semibold text-base-content-70 uppercase tracking-wider">Đường dẫn:</span>
+                    <div class="flex gap-2 items-center justify-between bg-base-200 p-2 rounded border border-base-300">
+                        <span id="detail-filepath" class="font-mono text-xs text-base-content select-all break-all pr-4"></span>
+                        <button id="detail-copy-btn" class="btn btn-xs btn-square btn-ghost shrink-0 opacity-60 hover:opacity-100" title="Sao chép đường dẫn">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="flex flex-col gap-1">
+                    <span class="text-xs font-semibold text-base-content-70 uppercase tracking-wider">Điểm số (Score):</span>
+                    <span id="detail-score" class="font-mono text-xs text-base-content bg-base-200 px-2 py-1 rounded border border-base-300 w-fit"></span>
+                </div>
+                <div class="flex flex-col gap-1">
+                    <span class="text-xs font-semibold text-base-content-70 uppercase tracking-wider">Nội dung đoạn trích:</span>
+                    <div id="detail-content" class="text-sm leading-relaxed text-base-content bg-base-200 border border-base-300 rounded-lg p-4 max-h-[300px] overflow-y-auto whitespace-pre-wrap break-words"></div>
+                </div>
+            </div>
+        </div>
+        <form method="dialog" class="modal-backdrop">
+            <button>close</button>
+        </form>
+    </dialog>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast toast-end toast-bottom z-[9999] opacity-0 translate-y-4 transition-all duration-300 pointer-events-none" style="display:none">
+        <div class="alert alert-info py-2 px-4 text-xs font-semibold shadow-md">
+            <span>Đã sao chép đường dẫn file!</span>
+        </div>
+    </div>
+
+    <!-- Page Logic -->
+    <script>
+        // Gửi event hành vi về behavior log (local, fire-and-forget — không chặn UI).
+        function sendEvent(ev) {
+            try {
+                fetch('/api/event', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(ev),
+                    keepalive: true
+                }).catch(() => {}); // lỗi mạng local không làm phiền user
+            } catch (e) {}
+        }
+        // Bắn app_open ngay khi trang load (user mở app).
+        sendEvent({ type: 'app_open' });
+        loadSuggestions();
+
+        const searchInput = document.getElementById('search-input');
+        const loader = document.getElementById('search-loader');
+        const exactList = document.getElementById('exact-list');
+        const suggestList = document.getElementById('suggest-list');
+        const exactCount = document.getElementById('exact-count');
+        const suggestCount = document.getElementById('suggest-count');
+        const toast = document.getElementById('toast');
+
+        let debounceTimer;
+        let chosenPathStr = '';
+        let onboardPathStr = '';
+        let isIndexingActive = false;
+        let indexingMessageText = '';
+        let onboardingDone = false;
+
+        // Check if running inside webview and initialize classes
+        if (typeof window.pickFolder === 'function') {
+            // Check if window resize is available, which means we are in spotlight search bar mode
+            if (typeof window.resizeWindow === 'function') {
+                document.body.classList.add('search-mode');
+            }
+        }
+
+        // View settings management
+        window.showView = function(viewName) {
+            if (viewName === 'search') {
+                if (typeof window.resizeWindow === 'function') {
+                    document.body.classList.add('search-mode');
+                }
+                closeSettings();
+                adjustWindowSize();
+                setTimeout(() => {
+                    if (searchInput) {
+                        searchInput.focus();
+                        searchInput.select();
+                    }
+                }, 50);
+            } else if (viewName === 'setting') {
+                document.body.classList.remove('search-mode');
+                openSettings();
+            }
+        };
+
+        // Window height dynamic adjuster for spotlight
+        function adjustWindowSize() {
+            if (document.body.classList.contains('search-mode')) {
+                const container = document.getElementById('main-container');
+                if (container) {
+                    let height = container.scrollHeight + 16;
+                    if (height < 90) height = 90;
+                    if (height > 600) height = 600;
+                    if (typeof window.resizeWindow === 'function') {
+                        window.resizeWindow(640, height);
+                    }
+                }
+            }
+        }
+
+        // Settings Dialog Handlers
+        function openSettings() {
+            const modal = document.getElementById('settings-modal');
+            if (!modal.open) {
+                modal.showModal();
+                fetchFolders();
+                if (typeof window.resizeWindow === 'function') {
+                    window.resizeWindow(900, 650);
+                }
+            }
+        }
+
+        function closeSettings() {
+            const modal = document.getElementById('settings-modal');
+            if (modal.open) {
+                modal.close();
+            }
+        }
+
+        // Handle settings dialog manual close event
+        document.getElementById('settings-modal').addEventListener('close', () => {
+            if (typeof window.resizeWindow === 'function') {
+                // Return to floating search mode if setting is closed
+                window.showView('search');
+            }
+        });
+
+        // --- Instant-search plumbing (như Google: hủy query cũ + cache + chỉ nhận kết quả mới nhất) ---
+        let searchSeq = 0;            // generation token: chỉ render kết quả của query MỚI NHẤT
+        let inflightController = null; // hủy request đang chạy khi gõ chữ mới
+        const resultCache = new Map(); // cache theo query (gõ thêm chữ không gọi lại)
+        const CACHE_MAX = 60;
+
+        // Debounced Search Input Handler
+        searchInput.addEventListener('input', () => {
+            clearTimeout(debounceTimer);
+            const query = searchInput.value.trim();
+            if (!query) {
+                // Hủy mọi request đang chạy, dọn UI ngay
+                if (inflightController) { inflightController.abort(); inflightController = null; }
+                searchSeq++;
+                resetUI();
+                return;
+            }
+            // Cache hit: hiện ngay, không chờ mạng
+            if (resultCache.has(query)) {
+                searchSeq++;
+                renderResults(resultCache.get(query), query);
+                return;
+            }
+            debounceTimer = setTimeout(() => {
+                fetchResults(query);
+            }, 180);
+        });
+
+        function resetUI() {
+            loader.classList.remove('visible');
+            document.getElementById('exact-section').classList.add('hidden');
+            document.getElementById('suggest-section').classList.add('hidden');
+            
+            exactList.innerHTML = '';
+            suggestList.innerHTML = '';
+            
+            updateEmptyState('');
+        }
+
+        // Tìm kiếm 2-THÌ (như Google):
+        //  THÌ 1 (fast, ~40ms): hiện kết quả thô NGAY để cảm giác "gõ tới đâu thấy tới đó".
+        //  THÌ 2 (final, <1s): reranker tinh chỉnh lại thứ tự, thay thế mượt khi xong.
+        // Cả hai dùng cùng layout nên không nhấp nháy — chỉ thứ tự/điểm cập nhật.
+        async function fetchResults(query) {
+            // Hủy request trước (nếu còn chạy) — chống "gõ từng chữ nhảy lung tung".
+            if (inflightController) inflightController.abort();
+            inflightController = new AbortController();
+            const mySeq = ++searchSeq;          // dấu thời điểm của query này
+            const signal = inflightController.signal;
+
+            loader.classList.add('visible');
+            let finalArrived = false;
+            let fastData = null;
+
+            // THÌ 1: kết quả thô tức thì (không chờ rerank)
+            const fastPromise = (async () => {
+                try {
+                    const resp = await fetch('/api/search?fast=1&q=' + encodeURIComponent(query), { signal });
+                    if (!resp.ok) return;
+                    const data = await resp.json();
+                    if (mySeq !== searchSeq) return;
+                    fastData = data;
+                    // Chỉ hiện thô nếu kết quả tinh CHƯA về (tránh đè kết quả tốt hơn)
+                    if (!finalArrived) renderResults(data, query);
+                } catch (_) { /* fast lỗi thì bỏ qua, đợi final */ }
+            })();
+
+            // THÌ 2: kết quả tinh (rerank)
+            try {
+                const response = await fetch('/api/search?q=' + encodeURIComponent(query), { signal });
+                if (!response.ok) {
+                    const data = await response.json();
+                    if (data && data.error) throw new Error(data.error);
+                    throw new Error('Mạng hoặc máy chủ gặp lỗi');
+                }
+                const data = await response.json();
+                if (mySeq !== searchSeq) return;
+                finalArrived = true;
+                // Nếu reranker loại hết NHƯNG thì-1 có kết quả: KHÔNG sập về "không
+                // tìm thấy" — giữ kết quả thô làm Gợi ý (không nhấp nháy 10→0).
+                const finalEmpty = (data.exact || []).length === 0 && (data.suggest || []).length === 0;
+                if (finalEmpty && fastData && (fastData.exact || []).length > 0) {
+                    data.suggest = fastData.exact;
+                    data.exact = [];
+                }
+                resultCache.set(query, data);
+                if (resultCache.size > CACHE_MAX) {
+                    resultCache.delete(resultCache.keys().next().value);
+                }
+                renderResults(data, query);
+            } catch (err) {
+                if (err.name === 'AbortError') return; // bị hủy vì gõ tiếp — im lặng
+                if (mySeq !== searchSeq) return;
+                console.error(err);
+                showErrorState(err.message);
+            } finally {
+                await fastPromise.catch(()=>{});
+                if (mySeq === searchSeq) loader.classList.remove('visible');
+            }
+        }
+
+        function showErrorState(msg) {
+            const displayMsg = msg || 'Lỗi kết nối máy chủ';
+            const exactSection = document.getElementById('exact-section');
+            const suggestSection = document.getElementById('suggest-section');
+            const emptyState = document.getElementById('empty-state');
+            
+            exactSection.classList.add('hidden');
+            suggestSection.classList.add('hidden');
+            
+            emptyState.classList.remove('hidden');
+            emptyState.innerHTML = `<div class="text-error font-medium">${displayMsg}</div>`;
+            
+            adjustWindowSize();
+        }
+
+        function renderResults(data, query) {
+            const exact = data.exact || [];
+            const suggest = data.suggest || [];
+
+            exactCount.textContent = exact.length;
+            suggestCount.textContent = suggest.length;
+
+            const totalResults = exact.length + suggest.length;
+            const exactSection = document.getElementById('exact-section');
+            const suggestSection = document.getElementById('suggest-section');
+            const emptyState = document.getElementById('empty-state');
+
+            if (totalResults === 0) {
+                exactSection.classList.add('hidden');
+                suggestSection.classList.add('hidden');
+                updateEmptyState(query);
+            } else {
+                emptyState.classList.add('hidden');
+                
+                if (exact.length > 0) {
+                    exactSection.classList.remove('hidden');
+                    exactList.innerHTML = exact.map((item, index) => createCardHTML(item, index)).join('');
+                } else {
+                    exactSection.classList.add('hidden');
+                    exactList.innerHTML = '';
+                }
+
+                if (suggest.length > 0) {
+                    suggestSection.classList.remove('hidden');
+                    suggestList.innerHTML = suggest.map((item, index) => createCardHTML(item, index + exact.length)).join('');
+                } else {
+                    suggestSection.classList.add('hidden');
+                    suggestList.innerHTML = '';
+                }
+            }
+            adjustWindowSize();
+        }
+
+        // Tải + hiện gợi ý chủ động khi ô search trống ("mở app là thấy file cần").
+        async function loadSuggestions() {
+            try {
+                const r = await fetch('/api/predict');
+                const preds = await r.json();
+                renderSuggestions(preds);
+            } catch (e) { /* im lặng nếu lỗi */ }
+        }
+
+        function renderSuggestions(preds) {
+            const emptyState = document.getElementById('empty-state');
+            if (!preds || preds.length === 0) {
+                emptyState.innerHTML = '<span class="text-sm opacity-75">Nhập từ khóa để tìm tài liệu</span>';
+                return;
+            }
+            const items = preds.map((p, i) => {
+                const name = p.path.split(/[/\\]/).pop()
+                    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+                const safePath = p.path
+                    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+                const reason = (p.reason || '')
+                    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                return `<div data-suggest-path="${safePath}" data-suggest-rank="${i + 1}" class="flex items-center gap-2 p-2 rounded hover:bg-base-200 cursor-pointer">
+                    <span class="font-medium truncate">${name}</span>
+                    <span class="text-xs opacity-60">${reason}</span>
+                </div>`;
+            }).join('');
+            emptyState.innerHTML = `<div class="text-xs font-semibold opacity-50 mb-1 px-2">GỢI Ý CHO BẠN</div>${items}`;
+        }
+
+        function updateEmptyState(query) {
+            const emptyState = document.getElementById('empty-state');
+            
+            if (!query) {
+                loadSuggestions();
+                return;
+            } else {
+                emptyState.innerHTML = `
+                    <span class="text-sm opacity-75">Không tìm thấy kết quả</span>
+                `;
+            }
+            adjustWindowSize();
+        }
+
+        // Bắt click trên mọi card kết quả → ghi event 'open' (file user thật sự mở).
+        document.addEventListener('click', function (e) {
+            const sug = e.target.closest('[data-suggest-path]');
+            if (sug) {
+                sendEvent({
+                    type: 'suggestion_click',
+                    path: sug.getAttribute('data-suggest-path'),
+                    rank: parseInt(sug.getAttribute('data-suggest-rank') || '0', 10)
+                });
+                // mở chi tiết file: điền tên vào ô search để user thấy ngay
+                const input = document.getElementById('search-input');
+                if (input) {
+                    input.value = sug.getAttribute('data-suggest-path').split(/[/\\]/).pop();
+                    input.dispatchEvent(new Event('input'));
+                }
+            }
+
+            const card = e.target.closest('[data-filepath]');
+            if (card) {
+                sendEvent({
+                    type: 'open',
+                    path: card.getAttribute('data-filepath'),
+                    fromQuery: (document.getElementById('search-input') || {}).value || ''
+                });
+            }
+        });
+
+        function createCardHTML(item, index) {
+            const escapedText = item.text
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+                
+            const escapedPath = item.filePath
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+
+            const filename = escapedPath.split(/[/\\]/).pop();
+            const displayScore = typeof item.score === 'number' ? item.score.toFixed(4) : 'N/A';
+
+            const jsonStr = JSON.stringify({
+                filename: filename,
+                filepath: item.filePath,
+                score: displayScore,
+                text: item.text
+            }).replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+
+            return `
+            <div data-filepath="${escapedPath}" class="card card-compact bg-base-100 border border-base-300 hover:border-primary/50 transition-colors cursor-pointer" onclick="showDetailFromJSON(this.querySelector('.filename-link').getAttribute('data-json'))">
+                <div class="card-body p-4 gap-2">
+                    <div class="flex flex-col gap-0.5">
+                        <div class="flex justify-between items-start gap-2">
+                            <a class="filename-link font-bold text-sm text-base-content hover:text-primary transition-colors truncate" onclick="event.stopPropagation(); showDetailFromJSON(this.getAttribute('data-json'))" data-json="${jsonStr}" title="Xem chi tiết">${filename}</a>
+                            <span class="badge badge-sm badge-outline font-mono text-[10px] text-base-content-70 shrink-0">Score: ${displayScore}</span>
+                        </div>
+                        <div class="flex items-center justify-between text-xs text-base-content-70 gap-2">
+                            <span class="truncate" title="${escapedPath}">${escapedPath}</span>
+                            <button class="btn btn-xs btn-square btn-ghost shrink-0 opacity-60 hover:opacity-100" onclick="event.stopPropagation(); copyToClipboard('${escapedPath}')" title="Sao chép đường dẫn">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                            </button>
+                        </div>
+                    </div>
+                    <p class="text-sm text-base-content-70 line-clamp-2">${escapedText}</p>
+                </div>
+            </div>
+            `;
+        }
+
+        function showDetailFromJSON(jsonStr) {
+            try {
+                const item = JSON.parse(jsonStr);
+                document.getElementById('detail-filename').textContent = item.filename;
+                document.getElementById('detail-filepath').textContent = item.filepath;
+                document.getElementById('detail-score').textContent = item.score;
+                document.getElementById('detail-content').textContent = item.text;
+                
+                document.getElementById('detail-copy-btn').onclick = () => {
+                    copyToClipboard(item.filepath);
+                };
+
+                const modal = document.getElementById('detail-modal');
+                if (!modal.open) {
+                    modal.showModal();
+                }
+            } catch (err) {
+                console.error('Lỗi hiển thị chi tiết:', err);
+            }
+        }
+
+        // Toast Helpers
+        function showToast(message) {
+            const toastAlert = toast.querySelector('span');
+            if (toastAlert) toastAlert.textContent = message;
+            toast.style.display = 'block';
+            requestAnimationFrame(() => {
+                toast.classList.remove('opacity-0', 'translate-y-4');
+                toast.classList.add('opacity-100', 'translate-y-0');
+            });
+            setTimeout(() => {
+                toast.classList.remove('opacity-100', 'translate-y-0');
+                toast.classList.add('opacity-0', 'translate-y-4');
+                setTimeout(() => {
+                    if (toast.classList.contains('opacity-0')) {
+                        toast.style.display = 'none';
+                    }
+                }, 300);
+            }, 2500);
+        }
+
+        async function copyToClipboard(text) {
+            try {
+                await navigator.clipboard.writeText(text);
+                showToast('Đã sao chép đường dẫn!');
+            } catch (err) {
+                const el = document.createElement('textarea');
+                el.value = text;
+                document.body.appendChild(el);
+                el.select();
+                document.execCommand('copy');
+                document.body.removeChild(el);
+                showToast('Đã sao chép đường dẫn!');
+            }
+        }
+
+        // Folder Indexing (Settings) Handlers
+        async function triggerFolderPicker() {
+            if (typeof window.pickFolder === 'function') {
+                try {
+                    const path = await window.pickFolder();
+                    if (path) {
+                        chosenPathStr = path;
+                        document.getElementById('chosen-path').textContent = path;
+                        document.getElementById('index-btn').classList.remove('hidden');
+                    }
+                } catch (err) {
+                    console.error('Lỗi chọn thư mục:', err);
+                }
+            } else {
+                const path = prompt('Nhập đường dẫn thư mục:');
+                if (path) {
+                    chosenPathStr = path;
+                    document.getElementById('chosen-path').textContent = path;
+                    document.getElementById('index-btn').classList.remove('hidden');
+                }
+            }
+        }
+
+        async function startIndexing() {
+            if (!chosenPathStr) return;
+            const btn = document.getElementById('index-btn');
+            const statusDiv = document.getElementById('index-status');
+            btn.disabled = true;
+            statusDiv.classList.remove('hidden');
+            statusDiv.className = "text-xs mt-1 text-info font-medium";
+            statusDiv.textContent = 'Đang tiến hành lập chỉ mục...';
+
+            try {
+                const response = await fetch('/api/index', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ dir: chosenPathStr, mode: 'background' })
+                });
+
+                if (!response.ok) {
+                    const errMsg = await response.text();
+                    throw new Error(errMsg || 'Lỗi không xác định');
+                }
+
+                const data = await response.json();
+                if (data && data.busy) {
+                    statusDiv.textContent = 'Máy chủ đang bận lập chỉ mục một thư mục khác!';
+                    statusDiv.className = "text-xs mt-1 text-error font-medium";
+                    btn.disabled = false;
+                    return;
+                }
+
+                statusDiv.textContent = 'Đã bắt đầu lập chỉ mục trong nền!';
+                statusDiv.className = "text-xs mt-1 text-success font-medium";
+                fetchFolders();
+            } catch (err) {
+                statusDiv.textContent = 'Lập chỉ mục thất bại: ' + err.message;
+                statusDiv.className = "text-xs mt-1 text-error font-medium";
+                btn.disabled = false;
+            }
+        }
+
+        async function fetchFolders() {
+            try {
+                const response = await fetch('/api/folders');
+                if (response.ok) {
+                    const folders = await response.json();
+                    renderFolders(folders);
+                }
+            } catch (err) {
+                console.error('Lỗi lấy danh sách thư mục:', err);
+            }
+        }
+
+        function renderFolders(folders) {
+            const container = document.getElementById('folders-list');
+            if (!folders || folders.length === 0) {
+                container.innerHTML = '<div class="text-xs italic opacity-60">Chưa có thư mục nào được lập chỉ mục trong phiên này.</div>';
+                return;
+            }
+
+            container.innerHTML = folders.map(f => {
+                const escaped = f
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .replace(/"/g, "&quot;")
+                    .replace(/'/g, "&#039;");
+                return `
+                <div class="flex justify-between items-center bg-base-200 p-2 rounded border border-base-300 text-xs gap-4">
+                    <span class="font-mono truncate select-all" title="${escaped}">${escaped}</span>
+                    <span class="badge badge-success badge-sm shrink-0">Indexed</span>
+                </div>
+                `;
+            }).join('');
+        }
+
+        // Onboarding Handlers
+        async function triggerOnboardPicker() {
+            if (typeof window.pickFolder === 'function') {
+                try {
+                    const path = await window.pickFolder();
+                    if (path) {
+                        onboardPathStr = path;
+                        document.getElementById('onboard-path').textContent = path;
+                        document.getElementById('onboard-start-btn').classList.remove('hidden');
+                    }
+                } catch (err) {
+                    console.error('Lỗi chọn thư mục onboarding:', err);
+                }
+            } else {
+                const path = prompt('Nhập đường dẫn thư mục tài liệu chính:');
+                if (path) {
+                    onboardPathStr = path;
+                    document.getElementById('onboard-path').textContent = path;
+                    document.getElementById('onboard-start-btn').classList.remove('hidden');
+                }
+            }
+        }
+
+        async function startOnboarding() {
+            if (!onboardPathStr) return;
+            const pickBtn = document.getElementById('onboard-pick-btn');
+            const startBtn = document.getElementById('onboard-start-btn');
+            const statusDiv = document.getElementById('onboard-status');
+
+            pickBtn.classList.add('hidden');
+            startBtn.classList.add('hidden');
+            statusDiv.classList.remove('hidden');
+            statusDiv.textContent = 'Đang bắt đầu lập chỉ mục nhanh...';
+
+            try {
+                const response = await fetch('/api/onboard', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ dir: onboardPathStr })
+                });
+
+                if (!response.ok) {
+                    const errMsg = await response.text();
+                    throw new Error(errMsg || 'Lỗi không xác định');
+                }
+
+                onboardingDone = true;
+                const onboardModal = document.getElementById('onboard-modal');
+                if (onboardModal.open) {
+                    onboardModal.close();
+                }
+            } catch (err) {
+                statusDiv.textContent = 'Lập chỉ mục nhanh thất bại: ' + err.message;
+                pickBtn.classList.remove('hidden');
+                startBtn.classList.remove('hidden');
+            }
+        }
+
+        // AI Model Setup Handlers
+        async function startSetup() {
+            const setupBtn = document.getElementById('setup-btn');
+            setupBtn.disabled = true;
+            setupBtn.textContent = 'Đang chuẩn bị...';
+
+            try {
+                const response = await fetch('/api/setup', { method: 'POST' });
+                if (response.ok) {
+                    checkStatus();
+                } else {
+                    const txt = await response.text();
+                    alert('Lỗi bắt đầu setup: ' + txt);
+                    setupBtn.disabled = false;
+                    setupBtn.textContent = 'Tải ngay';
+                }
+            } catch (err) {
+                alert('Lỗi kết nối setup: ' + err.message);
+                setupBtn.disabled = false;
+                setupBtn.textContent = 'Tải ngay';
+            }
+        }
+
+        // Status Polling Logic
+        let wasDownloading = false;
+        let wasMissing = true;
+
+        async function checkStatus() {
+            try {
+                const response = await fetch('/api/status');
+                if (!response.ok) return;
+                const status = await response.json();
+
+                isIndexingActive = (status.indexing === true) || (status.phase === 'background' || status.phase === 'fast');
+                
+                if (status.indexing) {
+                    let prefix = 'Đang lập chỉ mục: ';
+                    if (status.phase === 'background') {
+                        prefix = 'Đang lập chỉ mục nền: ';
+                    } else if (status.phase === 'fast') {
+                        prefix = 'Đang lập chỉ mục nhanh: ';
+                    }
+                    indexingMessageText = prefix + status.currentDir + ' (' + status.filesIndexed + ' file)...';
+                } else {
+                    indexingMessageText = '';
+                }
+
+                // Update header indexing badge
+                const indexingBadge = document.getElementById('indexing-badge');
+                if (indexingBadge) {
+                    if (isIndexingActive) {
+                        indexingBadge.classList.remove('hidden');
+                        indexingBadge.title = indexingMessageText || 'Đang lập chỉ mục...';
+                    } else {
+                        indexingBadge.classList.add('hidden');
+                        indexingBadge.title = '';
+                    }
+                }
+
+                // AI Model Setup Banner
+                const banner = document.getElementById('setup-banner');
+                const bannerMsg = document.getElementById('setup-banner-msg');
+                const setupBtn = document.getElementById('setup-btn');
+
+                if (status.missing) {
+                    banner.classList.remove('hidden');
+                    searchInput.disabled = true;
+                    searchInput.placeholder = "Vui lòng tải model AI trước...";
+
+                    if (status.downloading) {
+                        bannerMsg.textContent = 'Đang tải model: ' + status.status + ' (' + status.percent + '%)';
+                        setupBtn.classList.add('hidden');
+                        wasDownloading = true;
+                    } else if (status.error) {
+                        bannerMsg.textContent = 'Lỗi tải: ' + status.error;
+                        setupBtn.textContent = 'Thử lại';
+                        setupBtn.classList.remove('hidden');
+                        setupBtn.disabled = false;
+                        wasDownloading = false;
+                    } else {
+                        bannerMsg.textContent = 'Chưa có model AI — cần tải (khoảng 4GB).';
+                        setupBtn.textContent = 'Tải ngay';
+                        setupBtn.classList.remove('hidden');
+                        setupBtn.disabled = false;
+                        wasDownloading = false;
+                    }
+                    wasMissing = true;
+                } else {
+                    banner.classList.add('hidden');
+                    searchInput.disabled = false;
+                    if (searchInput.placeholder === "Vui lòng tải model AI trước...") {
+                        searchInput.placeholder = "Tìm tài liệu...";
+                    }
+
+                    if (wasMissing) {
+                        wasMissing = false;
+                        if (wasDownloading) {
+                            showToast('Đã tải và khởi tạo model AI thành công!');
+                            resetUI();
+                        }
+                    }
+                    wasDownloading = false;
+                }
+
+                // Onboarding Modal
+                const onboardModal = document.getElementById('onboard-modal');
+                const onboardStatus = document.getElementById('onboard-status');
+                const onboardPickBtn = document.getElementById('onboard-pick-btn');
+                const onboardStartBtn = document.getElementById('onboard-start-btn');
+
+                if (!status.onboarded && !onboardingDone) {
+                    if (!onboardModal.open) {
+                        onboardModal.showModal();
+                    }
+                    if (status.indexing) {
+                        onboardPickBtn.classList.add('hidden');
+                        onboardStartBtn.classList.add('hidden');
+                        onboardStatus.classList.remove('hidden');
+                        onboardStatus.textContent = 'Đang thiết lập ban đầu (nhanh): ' + status.currentDir + ' (' + status.filesIndexed + ' file)...';
+                    } else {
+                        onboardPickBtn.classList.remove('hidden');
+                        if (onboardPathStr) {
+                            onboardStartBtn.classList.remove('hidden');
+                        }
+                        onboardStatus.classList.add('hidden');
+                    }
+                } else {
+                    if (onboardModal.open) {
+                        onboardModal.close();
+                    }
+                }
+
+                // Indexing Status inside settings
+                const indexStatusDiv = document.getElementById('index-status');
+                const indexBtn = document.getElementById('index-btn');
+
+                if (status.indexing) {
+                    if (indexStatusDiv) {
+                        indexStatusDiv.classList.remove('hidden');
+                        indexStatusDiv.className = "text-xs mt-1 text-info font-medium";
+                        indexStatusDiv.textContent = indexingMessageText;
+                    }
+                    if (indexBtn) {
+                        indexBtn.disabled = true;
+                    }
+                } else {
+                    if (indexStatusDiv && !indexStatusDiv.classList.contains('hidden') && indexStatusDiv.textContent.includes('Đang lập chỉ mục:')) {
+                        const folderPath = chosenPathStr || 'thư mục';
+                        indexStatusDiv.textContent = 'Xong! Đã lập chỉ mục ' + folderPath;
+                        indexStatusDiv.className = "text-xs mt-1 text-success font-medium";
+                        setTimeout(() => {
+                            if (indexStatusDiv.textContent.startsWith('Xong!')) {
+                                indexStatusDiv.classList.add('hidden');
+                            }
+                        }, 8000);
+                    }
+                    if (indexBtn) {
+                        indexBtn.disabled = !chosenPathStr;
+                    }
+                }
+
+                // Empty / Indexing State Sync
+                const query = searchInput.value.trim();
+                const totalResults = exactList.children.length + suggestList.children.length;
+                if (!query || totalResults === 0) {
+                    updateEmptyState(query);
+                }
+
+            } catch (err) {
+                console.error('Lỗi kiểm tra trạng thái:', err);
+            }
+        }
+
+        // Initialize
+        checkStatus();
+        fetchFolders();
+        setInterval(checkStatus, 2000);
+    </script>
+</body>
+</html>

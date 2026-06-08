@@ -1,0 +1,54 @@
+Bạn là kỹ sư Go senior. Nhiệm vụ: LÊN KẾ HOẠCH rồi TỰ THỰC THI Giai đoạn 3 + 4 của
+"Intent Engine" cho better-recoll. Đây là 2 phần CUỐI của "bộ não thấu hiểu".
+
+ĐỌC TRƯỚC (bắt buộc, hiểu đầy đủ trước khi làm):
+1. docs/agy-tasks/SCORING_DESIGN.md — CÔNG THỨC GỐC (chính bạn đã nghiên cứu). GĐ3 =
+   mục 1.4 (Nhịp thời gian / Gaussian). GĐ4 = mục 5 (Tự học / Passive-Aggressive) +
+   mục 6 (Đánh giá / Offline Replay).
+2. docs/superpowers/specs/2026-06-07-intent-engine-design.md — tầm nhìn tổng.
+3. internal/intent/ (event.go, log.go, profile.go, predictor.go) — code GĐ1+2 ĐÃ CÓ.
+   GĐ3/4 MỞ RỘNG cái này, KHÔNG viết lại.
+
+ĐÃ CÓ SẴN (từ GĐ1+2 — dùng, đừng làm lại):
+- intent.Profile{InterestVector, FileStats}; intent.Predict(files, prof, now, k) với
+  trọng số HẰNG wCos=0.20 wRec=0.60 wFreq=0.20.
+- events.jsonl có đủ loại: app_open/search/open/suggestion_click(+Rank)/suggestion_ignore(+Shown).
+- store.FileEntries() trả file (path+vector+mtime). GET /api/predict đã chạy.
+
+NHIỆM VỤ GĐ3 (Time Profile — nhịp thời gian):
+- Thêm TimeProfile vào Profile: học "giờ-đỉnh" hay mở mỗi file/chủ đề từ events
+  (giờ-trong-ngày của các event open). Công thức S_time = Gaussian quanh giờ-đỉnh
+  (σ=2h, khoảng cách giờ VÒNG TRÒN) như SCORING_DESIGN mục 1.4.
+- Thêm yếu tố timeMatch vào Predict (trọng số wTime). Cập nhật công thức:
+  score = wCos·cos + wRec·rec + wFreq·freq + wTime·timeMatch.
+
+NHIỆM VỤ GĐ4 (Feedback Loop — TỰ HỌC trọng số, PHẦN KHÓ NHẤT):
+- intent.Learn(events) cập nhật w1..wN bằng Passive-Aggressive / online update như
+  SCORING_DESIGN mục 5.2: với cặp (f+ click, f- bỏ qua), nếu Score(f+) < Score(f-)+margin
+  thì w_i += η·E·(S_i(f+) - S_i(f-)), rồi clamp w_i>=0.05 + chuẩn hoá Σw=1. η=0.02, margin=0.05.
+- CHỐNG POSITION BIAS (mục 5.1): negative = file ĐÃ HIỆN TRÊN mà bị bỏ qua (top trên
+  click), KHÔNG phải mọi file. Dùng Rank + Shown trong events.
+- Lưu trọng số đã học vào .sfsindex (profile.gob hoặc weights.json), Predict đọc dùng.
+- Offline Replay (mục 6): viết 1 tool/test Go quét events.jsonl theo thời gian, mỗi
+  app_open chạy Predict, so file user mở SAU đó với top-5 → tính HitRate@5 + MRR@5.
+
+RÀNG BUỘC TUYỆT ĐỐI:
+1. 100% LOCAL, TOÁN THUẦN (không LLM, không ML lib, không gọi mạng). Go stdlib + math.
+2. TDD: mỗi tính năng VIẾT TEST TRƯỚC → FAIL → code → PASS. Đặc biệt GĐ4: test phải
+   chứng minh trọng số THAY ĐỔI ĐÚNG HƯỚNG sau feedback (click file recency-cao →
+   wRec tăng), và position-bias xử lý đúng.
+3. KHÔNG đổi public API đã có (Predict/Profile signature có thể MỞ RỘNG thêm tham số
+   nhưng giữ tương thích, hoặc thêm hàm mới). KHÔNG phá GĐ1/2.
+4. KHÔNG git commit. KHÔNG đụng ngoài internal/intent/, internal/webui/webui.go
+   (nếu cần /api/predict đọc weights), internal/webui/assets/index.html (nếu cần bắn
+   suggestion_ignore).
+5. TRƯỚC MỌI lệnh go: export CGO_LDFLAGS="-L$TMPDIR/sfs-libs"; ln -sfn "/Users/tatlatat/Documents/level 3/libs" "$TMPDIR/sfs-libs"
+
+QUY TRÌNH:
+A. Đầu tiên: VIẾT KẾ HOẠCH ra docs/superpowers/plans/2026-06-07-intent-phase34.md
+   (các task TDD nhỏ, file/code/test cụ thể). DỪNG LẠI, in ra "KẾ HOẠCH XONG, chờ duyệt".
+B. (Người review sẽ đọc kế hoạch của bạn). Nếu được bảo tiếp, THỰC THI tuần tự tới hết.
+C. Khi xong: build + go test ./internal/intent/ ./internal/webui/ -short, báo kết quả
+   + in HitRate@5/MRR@5 từ offline replay.
+
+Bắt đầu bằng đọc 3 tài liệu, rồi viết kế hoạch GĐ3+4. CHỈ viết kế hoạch trước, chưa code.

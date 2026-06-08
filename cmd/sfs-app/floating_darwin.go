@@ -12,27 +12,37 @@ void makeWindowFloating(void* wndPtr) {
     if (window == nil) {
         return;
     }
-    
-    // Set style mask to borderless
-    [window setStyleMask:NSWindowStyleMaskBorderless];
-    
-    // Make background transparent/clear
+
+    // QUAN TRỌNG: KHÔNG dùng NSWindowStyleMaskBorderless thuần — window đó trả
+    // NO từ canBecomeKeyWindow nên KHÔNG NHẬN bàn phím/chuột (lỗi gõ không được).
+    // Dùng Titled + FullSizeContentView rồi ẩn titlebar → trông như borderless
+    // NHƯNG vẫn nhận input.
+    [window setStyleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskFullSizeContentView | NSWindowStyleMaskResizable];
+    [window setTitlebarAppearsTransparent:YES];
+    [window setTitleVisibility:NSWindowTitleHidden];
+    [window setMovableByWindowBackground:YES];
+    // Ẩn 3 nút đỏ/vàng/xanh
+    [[window standardWindowButton:NSWindowCloseButton] setHidden:YES];
+    [[window standardWindowButton:NSWindowMiniaturizeButton] setHidden:YES];
+    [[window standardWindowButton:NSWindowZoomButton] setHidden:YES];
+
+    // Make background transparent/clear (glass cho qua từ CSS)
     [window setOpaque:NO];
     [window setBackgroundColor:[NSColor clearColor]];
     [window setHasShadow:YES];
-    
+
     // Set level to floating (above other windows)
     [window setLevel:NSFloatingWindowLevel];
-    
+
     // Position the window centered horizontally, in the upper-third of the screen
     NSRect screenRect = [[NSScreen mainScreen] visibleFrame];
     NSRect windowRect = [window frame];
-    
+
     windowRect.origin.x = (screenRect.size.width - windowRect.size.width) / 2 + screenRect.origin.x;
     windowRect.origin.y = screenRect.origin.y + (screenRect.size.height * 2 / 3) - (windowRect.size.height / 2);
-    
+
     [window setFrame:windowRect display:YES];
-    
+
     // Make WKWebView transparent if found
     @try {
         NSView* contentView = [window contentView];
@@ -55,17 +65,17 @@ void makeWindowNormal(void* wndPtr) {
     if (window == nil) {
         return;
     }
-    
+
     // Restore titled, closable, resizable style mask
     [window setStyleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable];
-    
+
     // Set opaque and window background color
     [window setOpaque:YES];
     [window setBackgroundColor:[NSColor windowBackgroundColor]];
-    
+
     // Restore window level to normal
     [window setLevel:NSNormalWindowLevel];
-    
+
     // Restore WKWebView drawsBackground
     @try {
         NSView* contentView = [window contentView];
@@ -81,7 +91,7 @@ void makeWindowNormal(void* wndPtr) {
     } @catch (NSException* exception) {
         // Ignore
     }
-    
+
     [window display];
 }
 
@@ -94,29 +104,46 @@ void centerNSWindow(void* wndPtr) {
 void showNSWindow(void* wndPtr) {
     NSWindow* window = (NSWindow*)wndPtr;
     if (window == nil) return;
-    
-    [window makeKeyAndOrderFront:nil];
+
     [NSApp activateIgnoringOtherApps:YES];
+    [window makeKeyAndOrderFront:nil];
+    [window makeFirstResponder:[window contentView]];
+    // Bo góc mềm cho content (glass) + cắt viền thừa
+    NSView* cv = [window contentView];
+    if (cv != nil) {
+        [cv setWantsLayer:YES];
+        cv.layer.cornerRadius = 16.0;
+        cv.layer.masksToBounds = YES;
+    }
 }
 
 void hideNSWindow(void* wndPtr) {
     NSWindow* window = (NSWindow*)wndPtr;
     if (window == nil) return;
-    
+
     [window orderOut:nil];
+}
+
+// windowIsVisible trả 1 nếu cửa sổ đang hiện VÀ là key window (đang focus).
+// Dùng cho toggle hotkey: đọc trạng thái THẬT của cửa sổ thay vì cờ isBarVisible
+// dễ lệch (click ra ngoài làm cửa sổ mất focus mà cờ không cập nhật).
+int windowIsVisible(void* wndPtr) {
+    NSWindow* window = (NSWindow*)wndPtr;
+    if (window == nil) return 0;
+    return ([window isVisible] && [window isKeyWindow]) ? 1 : 0;
 }
 
 void resizeNSWindow(void* wndPtr, int width, int height) {
     NSWindow* window = (NSWindow*)wndPtr;
     if (window == nil) return;
-    
+
     NSRect frame = [window frame];
     CGFloat diffY = height - frame.size.height;
-    
+
     frame.size.width = width;
     frame.size.height = height;
     frame.origin.y -= diffY; // Grow downwards (top-left stays fixed)
-    
+
     [window setFrame:frame display:YES animate:YES];
 }
 */
@@ -156,6 +183,14 @@ func hideWindow(ptr unsafe.Pointer) {
 		return
 	}
 	C.hideNSWindow(ptr)
+}
+
+// windowVisible reports whether the window is currently shown AND focused.
+func windowVisible(ptr unsafe.Pointer) bool {
+	if ptr == nil {
+		return false
+	}
+	return C.windowIsVisible(ptr) == 1
 }
 
 func resizeWindow(ptr unsafe.Pointer, width, height int) {

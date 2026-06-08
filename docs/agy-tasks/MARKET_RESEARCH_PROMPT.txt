@@ -1,0 +1,42 @@
+Bạn có công cụ web search. Nhiệm vụ: NGHIÊN CỨU THỊ TRƯỜNG — tìm các dự án/repo/sản
+phẩm đã có giống với ý tưởng của tôi, để biết: (a) ai đã làm rồi, (b) họ làm thế nào,
+(c) ý tưởng của tôi có gì KHÁC BIỆT/mới, (d) học được gì.
+
+Ý TƯỞNG CỦA TÔI (đọc docs/superpowers/specs/2026-06-07-intent-engine-design.md để
+hiểu đầy đủ — đọc trước khi search):
+- Một công cụ semantic file search LOCAL (offline, BGE-M3 embedding) cho dân văn phòng.
+- Điểm KHÁC BIỆT cốt lõi: không chỉ TÌM file, mà DỰ ĐOÁN file user định tìm và hiện
+  TRƯỚC KHI họ gõ (mở app → đã thấy 3-5 file cần) — kiểu "TikTok cho file": học hành
+  vi (mở app/search/mở file/mtime) → hồ sơ ngữ nghĩa người dùng (interest vector) →
+  xếp hạng (cosine + recency + frequency + nhịp thời gian) → feedback loop tự học.
+- Ràng buộc: 100% LOCAL (không cloud, không gửi dữ liệu đi), TOÁN THUẦN (không LLM,
+  không server), nhẹ chạy laptop dân văn phòng.
+
+TÌM VÀ PHÂN TÍCH (search nhiều vòng, đa từ khoá):
+1. Công cụ "predictive file search" / "proactive file recommendation" / "anticipatory
+   file retrieval" — desktop search đoán file TRƯỚC khi gõ.
+2. Semantic/local desktop search dùng embedding: Recoll, DocFetcher, Orama, qdrant-local,
+   khoj, reor, khoj-ai, Hyperspace, kde Baloo, macOS Spotlight ML — cái nào có DỰ ĐOÁN
+   chủ động (không chỉ tìm)?
+3. "Behavioral / context-aware recommendation" cho file cá nhân, chạy local.
+4. Các dự án "second brain" / PKM (Obsidian, Logseq, reor, khoj) có gợi ý chủ động
+   dựa hành vi + ngữ nghĩa không? Họ dùng local hay cloud LLM?
+5. Có sản phẩm thương mại nào (Mem, Rewind.ai, Heyday, Personal.ai) làm "đoán điều bạn
+   cần"? Họ local hay cloud? Khác gì ý tưởng của tôi?
+
+RA 1 FILE docs/agy-tasks/MARKET_RESEARCH.md gồm:
+- BẢNG so sánh: mỗi dự án/sản phẩm tìm được × các tiêu chí (local hay cloud? có dự
+  đoán-trước-khi-gõ không? dùng embedding gì? học hành vi không? feedback loop? mã
+  nguồn mở?). Kèm link GitHub/web thật.
+- PHÂN TÍCH KHOẢNG TRỐNG: ý tưởng của tôi (local + toán-thuần + dự-đoán-trước-khi-gõ
+  + dân văn phòng) — đã có ai làm ĐÚNG combo này chưa? Nếu chưa, đó là khoảng trống.
+  Nếu có, họ làm tới đâu, ta hơn/kém gì.
+- HỌC ĐƯỢC GÌ: thuật toán/kỹ thuật cụ thể từ các repo open-source có thể áp dụng
+  (vd cách họ tính recency, cách họ chống cold-start, cách họ làm feedback).
+- RỦI RO: ý tưởng này có "đã chết"/bị bỏ ở đâu không (dự án archived)? vì sao?
+
+Yêu cầu: dùng link THẬT (verify bằng web search, đừng bịa repo). Trung thực — nếu
+ý tưởng đã phổ biến thì nói thẳng. Nếu là khoảng trống thật thì chỉ rõ vì sao chưa
+ai làm. KHÔNG code. Chỉ ra MARKET_RESEARCH.md.
+
+Bắt đầu: đọc spec, rồi search nhiều vòng, rồi viết file.
