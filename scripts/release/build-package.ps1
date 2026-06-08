@@ -21,7 +21,12 @@ $env:CC = "gcc"
 $env:CXX = "g++"
 $env:CGO_ENABLED = "1"
 
-$modDir = (go list -m -f '{{.Dir}}' github.com/daulet/tokenizers).Trim()
+$modInfo = go mod download -json github.com/daulet/tokenizers | ConvertFrom-Json
+$modDir = $modInfo.Dir
+if (-not $modDir) {
+    throw "failed to resolve github.com/daulet/tokenizers module directory"
+}
+$modDir = $modDir.Trim()
 Push-Location $modDir
 cargo build --release --target x86_64-pc-windows-gnu -p tokenizers-ffi
 Pop-Location
